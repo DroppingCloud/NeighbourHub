@@ -1,0 +1,170 @@
+# =========================
+# OS generated files
+# =========================
+
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# =========================
+# IDE / Editor
+# =========================
+
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# =========================
+# Java / Spring Boot
+# =========================
+
+target/
+out/
+build/
+.gradle/
+.gradle-cache/
+
+*.class
+*.jar
+*.war
+*.ear
+
+!mvnw
+!mvnw.cmd
+!.mvn/wrapper/maven-wrapper.jar
+
+!gradlew
+!gradlew.bat
+!gradle/wrapper/gradle-wrapper.jar
+
+# Logs
+logs/
+*.log
+
+# Spring Boot local config
+application-local.yml
+application-local.yaml
+application-dev-local.yml
+application-dev-local.yaml
+
+# =========================
+# Node / Frontend
+# =========================
+
+node_modules/
+dist/
+build/
+coverage/
+
+.npm/
+.pnpm-store/
+.yarn/
+.yarn-cache/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend env files
+.env
+.env.local
+.env.*.local
+
+# 保留环境变量模板
+!.env.example
+
+# =========================
+# Python / scripts if any
+# =========================
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+.venv/
+venv/
+env/
+
+# =========================
+# Database / SQL / Docker
+# =========================
+
+# 数据库真实数据不要提交
+mysql_data/
+db_data/
+data/mysql/
+
+*.db
+*.sqlite
+*.sqlite3
+
+# 数据库导出文件通常较大，谨慎提交
+*.sql.gz
+*.dump
+
+# 如果是初始化 SQL，可以提交
+!sql/init/*.sql
+!sql/**/*.sql
+
+# Docker 本身配置可以提交
+!docker-compose.yml
+!docker-compose.yaml
+!Dockerfile
+
+# 本地 Docker override 不提交
+docker-compose.override.yml
+docker-compose.local.yml
+
+# =========================
+# Uploads / runtime files
+# =========================
+
+uploads/
+upload/
+files/
+tmp/
+temp/
+
+# =========================
+# Test / cache
+# =========================
+
+.cache/
+.tmp/
+test-output/
+reports/
+
+# =========================
+# Sensitive files
+# =========================
+
+*.key
+*.pem
+*.p12
+*.jks
+
+secrets/
+secret/
+credentials/
+credentials.json
+
+# =========================
+# Misc
+# =========================
+
+*.bak
+*.swp
+*.swo
+*.orig
+
+# =========================
+# Other
+# =========================
+
+.claude/

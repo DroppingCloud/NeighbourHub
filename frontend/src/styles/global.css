@@ -1,0 +1,37 @@
+/* 全局样式重置与变量定义 */
+
+:root {
+  --primary-color: #409eff;
+  --success-color: #67c23a;
+  --warning-color: #e6a23c;
+  --danger-color: #f56c6c;
+  --info-color: #909399;
+  --bg-color: #f5f7fa;
+  --sidebar-width: 220px;
+  --header-height: 60px;
+
+  /* 适老化字号 */
+  --font-size-base: 14px;
+  --font-size-large: 16px;
+  --font-size-xlarge: 18px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: var(--font-size-base);
+  color: #303133;
+  background-color: var(--bg-color);
+}
+
+/* 适老化：确保最小字号 */
+.el-button,
+.el-form-item__label,
+.el-input__inner {
+  font-size: var(--font-size-base);
+}
