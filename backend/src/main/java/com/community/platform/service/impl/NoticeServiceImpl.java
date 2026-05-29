@@ -1,44 +1,85 @@
 package com.community.platform.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.community.platform.common.BusinessException;
+import com.community.platform.common.ResultCode;
 import com.community.platform.entity.Notice;
+import com.community.platform.mapper.NoticeMapper;
 import com.community.platform.service.NoticeService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-@Slf4j
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class NoticeServiceImpl implements NoticeService {
 
+    private final NoticeMapper noticeMapper;
+
     @Override
     public Page<Notice> getList(Long userId, Integer pageNum, Integer pageSize) {
-        // TODO: 分页查询通知列表
-        throw new UnsupportedOperationException("TODO: 实现通知列表查询");
+        LambdaQueryWrapper<Notice> wrapper = new LambdaQueryWrapper<Notice>()
+                .eq(Notice::getUserId, userId)
+                .orderByAsc(Notice::getIsRead)
+                .orderByDesc(Notice::getCreateTime);
+        return noticeMapper.selectPage(new Page<>(page(pageNum), size(pageSize)), wrapper);
     }
 
     @Override
     public void markRead(Long userId, Long noticeId) {
-        // TODO: 校验通知归属、更新 is_read = 1
-        throw new UnsupportedOperationException("TODO: 实现标记已读");
+        Notice notice = noticeMapper.selectById(noticeId);
+        if (notice == null || !userId.equals(notice.getUserId())) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "通知不存在");
+        }
+        if (notice.getIsRead() == null || notice.getIsRead() == 0) {
+            notice.setIsRead(1);
+            notice.setReadTime(LocalDateTime.now());
+            noticeMapper.updateById(notice);
+        }
     }
 
     @Override
     public void markAllRead(Long userId) {
-        // TODO: 批量更新该用户所有未读通知
-        throw new UnsupportedOperationException("TODO: 实现全部标记已读");
+        noticeMapper.update(null, new LambdaUpdateWrapper<Notice>()
+                .eq(Notice::getUserId, userId)
+                .eq(Notice::getIsRead, 0)
+                .set(Notice::getIsRead, 1)
+                .set(Notice::getReadTime, LocalDateTime.now()));
     }
 
     @Override
     public Long getUnreadCount(Long userId) {
-        // TODO: 查询未读通知数量
-        throw new UnsupportedOperationException("TODO: 实现获取未读数量");
+        return noticeMapper.selectCount(new LambdaQueryWrapper<Notice>()
+                .eq(Notice::getUserId, userId)
+                .eq(Notice::getIsRead, 0));
     }
 
     @Override
     public void sendNotice(Long userId, String title, String content, String type, Long refId) {
-        // TODO: 创建通知记录，后续可扩展推送能力
-        throw new UnsupportedOperationException("TODO: 实现发送通知");
+        sendNotice(userId, title, content, type, null, refId);
+    }
+
+    @Override
+    public void sendNotice(Long userId, String title, String content, String type, String refType, Long refId) {
+        Notice notice = new Notice();
+        notice.setUserId(userId);
+        notice.setTitle(title);
+        notice.setContent(content);
+        notice.setType(type);
+        notice.setRefType(refType);
+        notice.setRefId(refId);
+        notice.setIsRead(0);
+        noticeMapper.insert(notice);
+    }
+
+    private long page(Integer pageNum) {
+        return pageNum == null || pageNum < 1 ? 1 : pageNum;
+    }
+
+    private long size(Integer pageSize) {
+        return pageSize == null || pageSize < 1 ? 10 : pageSize;
     }
 }

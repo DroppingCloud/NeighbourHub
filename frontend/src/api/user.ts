@@ -1,31 +1,35 @@
 import request from '@/utils/request'
+import { getMe, type UserInfoVO } from '@/api/auth'
 
-export interface UserInfo {
-  userId: number
-  username: string
-  phone?: string
-  email?: string
-  roles: string[]
-  realName?: string
-  idCard?: string
-  address?: string
-  age?: number
+export type UserInfo = UserInfoVO
+
+export interface ProxyBindRequest {
+  targetUserId?: number
+  targetProfileId?: number
+  relation?: string
+  authorizedActions?: string
 }
 
-export interface UpdateUserRequest {
-  phone?: string
-  email?: string
-  address?: string
+export interface ProxyRelationVO extends ProxyBindRequest {
+  id: number
+  proxyUserId: number
+  status: string
+  createTime: string
+  updateTime: string
 }
 
-export const getUserInfo = (userId: number) =>
-  request.get<any, UserInfo>(`/api/user/${userId}`)
+export const getCurrentUserInfo = () => getMe()
 
-export const updateUserInfo = (userId: number, data: UpdateUserRequest) =>
-  request.put<any, void>(`/api/user/${userId}`, data)
+export const bindProxy = (data: ProxyBindRequest) =>
+  request.post<any, number>('/api/proxy/bind', data)
 
-export const bindProxy = (targetUserId: number) =>
-  request.post<any, void>('/api/user/proxy/bind', { targetUserId })
+export const getProxyRelations = () =>
+  request.get<any, ProxyRelationVO[]>('/api/proxy/list')
 
-export const getUsersByRole = (role: string, pageNum = 1, pageSize = 10) =>
-  request.get<any, any>('/api/admin/user/list', { params: { role, pageNum, pageSize } })
+export const revokeProxyRelation = (id: number) =>
+  request.put<any, void>(`/api/proxy/${id}/revoke`)
+
+export const getUsersByRole = (role?: string, pageNum = 1, pageSize = 10) =>
+  request.get<any, any>('/api/admin/user/list', {
+    params: { role: role || undefined, pageNum, pageSize }
+  })

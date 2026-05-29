@@ -30,6 +30,8 @@ export interface UserInfoVO {
   idCard?: string
   address?: string
   age?: number
+  gender?: string
+  birthday?: string
 }
 
 export const login = (data: LoginRequest): Promise<LoginResponse> =>
@@ -43,3 +45,6 @@ export const logout = (): Promise<void> =>
 
 export const getMe = (): Promise<UserInfoVO> =>
   request.get<any, UserInfoVO>('/api/auth/me')
+
+export const updateMe = (data: Partial<UserInfoVO>): Promise<void> =>
+  request.put<any, void>('/api/auth/me', data)

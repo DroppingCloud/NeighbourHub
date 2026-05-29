@@ -27,6 +27,9 @@ public class ServiceItem {
     /** 办理条件说明（JSON 或文本） */
     private String conditions;
 
+    /** Process steps JSON. */
+    private String processSteps;
+
     /** 状态: online/offline */
     private String status;
 

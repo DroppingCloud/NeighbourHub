@@ -1,326 +1,358 @@
 <template>
-  <div class="home">
-
-    <!-- 欢迎区 -->
-    <div class="welcome-bar">
-      <div class="welcome-left">
-        <div class="welcome-avatar">{{ avatarChar }}</div>
-        <div>
-          <h1 class="welcome-title">你好，{{ userStore.userInfo?.username }}</h1>
-          <p class="welcome-sub">{{ greeting }} · {{ dateStr }}</p>
-        </div>
+  <div class="home-container">
+    <div class="welcome-banner">
+      <div class="banner-content">
+        <h2>欢迎回来，{{ userInfo?.realName || userInfo?.username }}</h2>
+        <p>智慧社区服务平台，为您提供一站式政务服务</p>
       </div>
-      <div class="welcome-right">
-        <div class="role-tag">{{ roleLabel }}</div>
-      </div>
-    </div>
-
-    <!-- 统计数字（居民/家属） -->
-    <div v-if="isResidentOrFamily" class="stat-row">
-      <div v-for="s in stats" :key="s.label" class="stat-card">
-        <div class="stat-icon" :style="`background:${s.bg}`">
-          <component :is="s.icon" style="font-size:17px" :style="`color:${s.color}`" />
+      <div class="banner-stats">
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.applications }}</div>
+          <div class="stat-label">办理中申请</div>
         </div>
-        <div>
-          <div class="stat-num">{{ s.value }}</div>
-          <div class="stat-label">{{ s.label }}</div>
+        <div class="stat-item">
+          <div class="stat-value">{{ stats.bookings }}</div>
+          <div class="stat-label">进行中预约</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value">{{ unreadCount }}</div>
+          <div class="stat-label">未读消息</div>
         </div>
       </div>
     </div>
 
-    <!-- 功能入口卡片 -->
-    <h2 class="section-title">功能入口</h2>
-    <div class="entry-grid">
-      <div
-        v-for="(card, i) in entryCards"
-        :key="card.path"
-        class="entry-card"
-        :style="`animation-delay:${i * 0.06}s`"
-        @click="$router.push(card.path)"
-      >
-        <div class="entry-icon-wrap" :style="`background:${card.bg}`">
-          <component :is="card.icon" style="font-size:22px" :style="`color:${card.color}`" />
+    <div class="quick-actions">
+      <h3 class="section-title">快捷服务</h3>
+      <div class="action-grid">
+        <div class="action-card" @click="goTo('/guide')">
+          <div class="action-icon"><el-icon><MagicStick /></el-icon></div>
+          <span>AI智能导办</span>
         </div>
-        <div class="entry-info">
-          <div class="entry-title">{{ card.title }}</div>
-          <div class="entry-desc">{{ card.desc }}</div>
+        <div class="action-card" @click="goTo('/application/submit')">
+          <div class="action-icon"><el-icon><Document /></el-icon></div>
+          <span>事项办理</span>
         </div>
-        <div class="entry-arrow">
-          <svg viewBox="0 0 12 12" fill="none" width="12" height="12">
-            <path d="M3 6h6M7 4l2 2-2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+        <div class="action-card" @click="goTo('/booking')">
+          <div class="action-icon"><el-icon><Calendar /></el-icon></div>
+          <span>服务预约</span>
+        </div>
+        <div class="action-card" @click="goTo('/progress')">
+          <div class="action-icon"><el-icon><TrendCharts /></el-icon></div>
+          <span>进度查询</span>
         </div>
       </div>
     </div>
 
-    <!-- 最近通知 -->
-    <div class="notice-section" v-if="noticeStore.unreadCount">
-      <h2 class="section-title">
-        未读消息
-        <span class="notice-count">{{ noticeStore.unreadCount }}</span>
-      </h2>
-      <div class="notice-tip" @click="$router.push('/notice')">
-        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" style="color:#5B7FA6;flex-shrink:0">
-          <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zm0 16a2 2 0 01-2-2h4a2 2 0 01-2 2z"/>
-        </svg>
-        <span>您有 <strong>{{ noticeStore.unreadCount }}</strong> 条未读消息，点击查看详情</span>
-        <svg viewBox="0 0 12 12" fill="none" width="11" height="11" style="margin-left:auto;opacity:.5">
-          <path d="M3 6h6M7 4l2 2-2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+    <div class="hot-services">
+      <h3 class="section-title">热门事项</h3>
+      <div class="service-list" v-loading="loadingServices">
+        <div v-for="service in hotServices" :key="service.itemId" class="service-item" @click="applyService">
+          <div class="service-info">
+            <span class="service-name">{{ service.itemName }}</span>
+            <span class="service-category">{{ service.category }}</span>
+          </div>
+          <el-icon><Right /></el-icon>
+        </div>
+        <el-empty v-if="!loadingServices && hotServices.length === 0" description="暂无可办理事项" />
       </div>
     </div>
 
+    <div class="recent-applications">
+      <div class="section-header">
+        <h3 class="section-title">最近申请</h3>
+        <router-link to="/application/list" class="view-all">查看全部 &gt;</router-link>
+      </div>
+      <el-table :data="recentApplications" style="width: 100%" border v-loading="loadingApplications">
+        <el-table-column prop="itemName" label="事项名称" min-width="120" />
+        <el-table-column prop="submitTime" label="提交时间" min-width="180" />
+        <el-table-column label="状态" min-width="100">
+          <template #default="{ row }">
+            <el-tag :type="getStatusType(row.status)" size="small">
+              {{ row.statusLabel || getStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useUserStore } from '@/stores/userStore'
-import { useNoticeStore } from '@/stores/noticeStore'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { MagicStick, Document, Calendar, TrendCharts, Right } from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
+import { getUnreadCount } from '@/api/notice'
+import { getApplicationList, type ApplicationVO } from '@/api/application'
+import { getBookingList, type BookingVO } from '@/api/booking'
+import { getPublicServiceItemList, type ServiceItemVO } from '@/api/serviceItem'
 
-const userStore   = useUserStore()
-const noticeStore = useNoticeStore()
+const router = useRouter()
+const authStore = useAuthStore()
 
-const avatarChar = computed(() => (userStore.userInfo?.username || '?')[0].toUpperCase())
+const userInfo = computed(() => authStore.userInfo)
+const unreadCount = ref(0)
+const applications = ref<ApplicationVO[]>([])
+const bookings = ref<BookingVO[]>([])
+const services = ref<ServiceItemVO[]>([])
+const loadingApplications = ref(false)
+const loadingServices = ref(false)
 
-const isResidentOrFamily = computed(() =>
-  userStore.isResident || userStore.hasRole('ROLE_FAMILY')
-)
+const stats = computed(() => ({
+  applications: applications.value.filter(a => !['completed', 'rejected'].includes(a.status)).length,
+  bookings: bookings.value.filter(b => !['completed', 'cancelled'].includes(b.status)).length
+}))
 
-// 问候语
-const greeting = computed(() => {
-  const h = new Date().getHours()
-  if (h < 6)  return '夜深了，注意休息'
-  if (h < 12) return '早上好'
-  if (h < 14) return '中午好'
-  if (h < 18) return '下午好'
-  return '晚上好'
+const hotServices = computed(() => services.value.slice(0, 4))
+const recentApplications = computed(() => applications.value.slice(0, 3))
+
+onMounted(() => {
+  loadHomeData()
 })
 
-// 日期
-const dateStr = computed(() => {
-  const d = new Date()
-  const days = ['周日','周一','周二','周三','周四','周五','周六']
-  return `${d.getMonth()+1}月${d.getDate()}日 ${days[d.getDay()]}`
-})
-
-// 角色标签
-const roleLabel = computed(() => {
-  if (userStore.isAdmin) return '系统管理员'
-  if (userStore.isStaff) return '社区工作人员'
-  if (userStore.hasRole('ROLE_FAMILY')) return '家属代理人'
-  return '社区居民'
-})
-
-// 统计数字（占位）
-const stats = [
-  { label: '进行中申请', value: '—', icon: 'Document',     color: '#5B7FA6', bg: 'rgba(91,127,166,0.1)' },
-  { label: '待处理补件', value: '—', icon: 'Warning',       color: '#D4935A', bg: 'rgba(212,147,90,0.1)' },
-  { label: '服务预约',   value: '—', icon: 'Calendar',      color: '#5A9E7A', bg: 'rgba(90,158,122,0.1)' },
-  { label: '已完成事项', value: '—', icon: 'CircleCheck',   color: '#7A9EC0', bg: 'rgba(122,158,192,0.1)' },
-]
-
-// 功能入口
-const entryCards = computed(() => {
-  const cards: any[] = []
-  if (isResidentOrFamily.value) {
-    cards.push(
-      { path: '/guide',            title: '智能导办',   desc: 'AI 助您快速找到所需服务', icon: 'MagicStick', color: '#5B7FA6', bg: 'rgba(91,127,166,0.1)' },
-      { path: '/application/list', title: '我的申请',   desc: '查看事项申请进度与状态',   icon: 'Document',   color: '#7A9EC0', bg: 'rgba(122,158,192,0.1)' },
-      { path: '/booking',          title: '服务预约',   desc: '预约助餐、陪诊等便民服务', icon: 'Calendar',   color: '#5A9E7A', bg: 'rgba(90,158,122,0.1)' },
-      { path: '/progress',         title: '进度查询',   desc: '实时了解业务办理进度',     icon: 'Search',     color: '#8A7AC0', bg: 'rgba(138,122,192,0.1)' },
-      { path: '/notice',           title: '消息通知',   desc: '查看审核结果与系统通知',   icon: 'Bell',       color: '#C09A5A', bg: 'rgba(192,154,90,0.1)' },
-    )
+async function loadHomeData() {
+  loadingApplications.value = true
+  loadingServices.value = true
+  try {
+    const [appPage, bookingPage, servicePage, count] = await Promise.all([
+      getApplicationList({ pageNum: 1, pageSize: 10 }),
+      getBookingList(1, 10),
+      getPublicServiceItemList({ status: 'enabled', pageNum: 1, pageSize: 8 }),
+      getUnreadCount()
+    ])
+    applications.value = getPageRows<ApplicationVO>(appPage)
+    bookings.value = getPageRows<BookingVO>(bookingPage)
+    services.value = getPageRows<ServiceItemVO>(servicePage)
+    unreadCount.value = Number(count || 0)
+  } finally {
+    loadingApplications.value = false
+    loadingServices.value = false
   }
-  if (userStore.isStaff) {
-    cards.push(
-      { path: '/workorder', title: '工单管理', desc: '处理待审核事项与居民申请', icon: 'Files',        color: '#5B7FA6', bg: 'rgba(91,127,166,0.1)' },
-      { path: '/notice',    title: '消息通知', desc: '查看系统通知',           icon: 'Bell',         color: '#C09A5A', bg: 'rgba(192,154,90,0.1)' },
-    )
+}
+
+function getPageRows<T>(page: any): T[] {
+  if (Array.isArray(page)) return page
+  return page?.records || page?.list || page?.rows || []
+}
+
+function goTo(path: string) {
+  router.push(path)
+}
+
+function applyService() {
+  router.push('/application/submit')
+}
+
+function getStatusType(status: string) {
+  const map: Record<string, string> = {
+    pending: 'warning',
+    reviewing: 'primary',
+    supplement: 'danger',
+    approved: 'success',
+    completed: 'success',
+    rejected: 'info'
   }
-  if (userStore.isAdmin) {
-    cards.push(
-      { path: '/admin/dashboard',     title: '统计看板', desc: '查看平台运营数据与趋势', icon: 'DataAnalysis', color: '#5A9E7A', bg: 'rgba(90,158,122,0.1)' },
-      { path: '/admin/service-config', title: '事项配置', desc: '管理政务事项规则与模板', icon: 'Setting',      color: '#5B7FA6', bg: 'rgba(91,127,166,0.1)' },
-      { path: '/admin/user-manage',   title: '用户管理', desc: '管理平台用户与权限分配', icon: 'User',         color: '#8A7AC0', bg: 'rgba(138,122,192,0.1)' },
-      { path: '/workorder',           title: '工单管理', desc: '查看全部工单与处理状态', icon: 'Files',        color: '#7A9EC0', bg: 'rgba(122,158,192,0.1)' },
-      { path: '/notice',              title: '消息通知', desc: '查看系统通知',           icon: 'Bell',         color: '#C09A5A', bg: 'rgba(192,154,90,0.1)' },
-    )
+  return map[status] || 'info'
+}
+
+function getStatusText(status: string) {
+  const map: Record<string, string> = {
+    pending: '待审核',
+    reviewing: '审核中',
+    supplement: '待补件',
+    approved: '已通过',
+    completed: '已办结',
+    rejected: '已驳回'
   }
-  return cards
-})
+  return map[status] || status
+}
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
-
-.home {
-  max-width: 900px;
+.home-container {
+  max-width: 75rem;
   margin: 0 auto;
-  font-family: 'DM Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  animation: page-in .45s cubic-bezier(0.16,1,0.3,1) both;
-}
-@keyframes page-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: none; }
 }
 
-/* ─── 欢迎横幅 ─── */
-.welcome-bar {
+.welcome-banner {
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%);
+  border-radius: var(--radius-lg);
+  padding: 2rem 2.5rem;
+  margin-bottom: 2rem;
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  background: #F0F5FB;
-  border: 1px solid rgba(91,127,166,0.15);
-  border-radius: 16px;
-  padding: 22px 28px;
-  margin-bottom: 22px;
-}
-.welcome-left { display: flex; align-items: center; gap: 16px; }
-.welcome-avatar {
-  width: 48px; height: 48px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #7BAFD4, #4A7FA8);
+  align-items: center;
   color: #fff;
-  font-size: 20px;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.banner-content h2 {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.banner-content p {
+  color: rgba(255,255,255,0.7);
+}
+
+.banner-stats {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 2rem;
   font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.welcome-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1E2E3E;
-  margin: 0 0 4px;
-}
-.welcome-sub {
-  font-size: 13px;
-  color: #6A7F96;
-  margin: 0;
-}
-.role-tag {
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #5B7FA6;
-  background: rgba(91,127,166,0.1);
-  border: 1px solid rgba(91,127,166,0.2);
-  letter-spacing: .4px;
+  color: var(--gold-light);
 }
 
-/* ─── 统计行 ─── */
-.stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 28px;
+.stat-label {
+  font-size: 0.8125rem;
+  color: rgba(255,255,255,0.6);
+  margin-top: 0.25rem;
 }
-.stat-card {
-  background: #F7F9FC;
-  border: 1px solid rgba(91,127,166,0.12);
-  border-radius: 13px;
-  padding: 16px 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  transition: box-shadow 0.2s;
-}
-.stat-card:hover { box-shadow: 0 4px 16px rgba(60,90,140,0.1); }
-.stat-icon {
-  width: 40px; height: 40px;
-  border-radius: 11px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.stat-num { font-size: 20px; font-weight: 700; color: #1E2E3E; line-height: 1.2; }
-.stat-label { font-size: 11.5px; color: #8A9BB0; margin-top: 2px; }
 
-/* ─── 区块标题 ─── */
 .section-title {
-  font-size: 14px;
+  font-size: 1.125rem;
   font-weight: 600;
-  color: #3A526A;
-  margin: 0 0 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
 }
-.notice-count {
-  display: inline-flex;
+
+.quick-actions {
+  margin-bottom: 2rem;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 1.25rem;
+}
+
+.action-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.action-card:hover {
+  transform: translateY(-0.25rem);
+  box-shadow: var(--shadow-md);
+}
+
+.action-icon {
+  width: 3rem;
+  height: 3rem;
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px; height: 20px;
-  border-radius: 50%;
-  background: #E06060;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  margin: 0 auto 0.75rem;
+  font-size: 1.5rem;
+  color: var(--text-primary);
 }
 
-/* ─── 功能卡片 ─── */
-.entry-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 28px;
+.hot-services,
+.recent-applications {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
 }
-.entry-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  background: #F7F9FC;
-  border: 1px solid rgba(91,127,166,0.12);
-  border-radius: 14px;
-  cursor: pointer;
-  transition: box-shadow 0.2s, transform 0.2s, background 0.18s;
-  animation: card-in .4s cubic-bezier(0.16,1,0.3,1) both;
-}
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: none; }
-}
-.entry-card:hover {
-  box-shadow: 0 6px 22px rgba(60,90,140,0.12);
-  transform: translateY(-2px);
-  background: #F0F5FB;
-}
-.entry-icon-wrap {
-  width: 44px; height: 44px;
-  border-radius: 13px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.entry-info { flex: 1; min-width: 0; }
-.entry-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1E2E3E;
-  margin-bottom: 3px;
-}
-.entry-desc { font-size: 12px; color: #8A9BB0; }
-.entry-arrow {
-  color: #B0C0D4;
-  flex-shrink: 0;
-  transition: transform 0.18s, color 0.18s;
-}
-.entry-card:hover .entry-arrow { transform: translateX(3px); color: #5B7FA6; }
 
-/* ─── 通知提示条 ─── */
-.notice-tip {
+.service-list {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 16px;
-  background: rgba(91,127,166,0.06);
-  border: 1px solid rgba(91,127,166,0.18);
-  border-radius: 12px;
-  font-size: 13px;
-  color: #4A6A8A;
-  cursor: pointer;
-  transition: background 0.18s;
+  flex-direction: column;
 }
-.notice-tip:hover { background: rgba(91,127,166,0.11); }
-.notice-tip strong { color: #2C4A6E; }
+
+.service-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 0.0625rem solid var(--border-color);
+  cursor: pointer;
+  color: var(--text-primary);
+  gap: 0.75rem;
+}
+
+.service-info {
+  min-width: 0;
+}
+
+.service-item:last-child {
+  border-bottom: none;
+}
+
+.service-item:hover {
+  background: var(--bg-tertiary);
+  margin: 0 -0.5rem;
+  padding: 1rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.service-name {
+  font-weight: 500;
+  margin-right: 0.75rem;
+}
+
+.service-category {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 0.125rem 0.5rem;
+  border-radius: 1.25rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.view-all {
+  color: var(--gold);
+  text-decoration: none;
+  font-size: 0.8125rem;
+}
+
+.view-all:hover {
+  text-decoration: underline;
+}
+
+:deep(.el-table) {
+  background-color: transparent;
+}
+
+:deep(.el-table th),
+:deep(.el-table td) {
+  background-color: transparent;
+  border-bottom-color: var(--border-color);
+}
+
+:deep(.el-table .cell) {
+  white-space: normal;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+@media (max-width: 48rem) {
+  .banner-stats {
+    display: none;
+  }
+}
 </style>

@@ -27,6 +27,9 @@ public class Notice {
     /** 通知类型: audit_result/supplement/booking/system */
     private String type;
 
+    /** Related business type: application/booking/work_order/system. */
+    private String refType;
+
     /** 关联业务 ID（申请ID/预约ID等） */
     private Long refId;
 
@@ -34,4 +37,6 @@ public class Notice {
 
     @TableField(fill = com.baomidou.mybatisplus.annotation.FieldFill.INSERT)
     private LocalDateTime createTime;
+
+    private LocalDateTime readTime;
 }

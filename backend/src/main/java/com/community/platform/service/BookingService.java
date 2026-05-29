@@ -10,4 +10,7 @@ public interface BookingService {
     BookingVO getDetail(Long userId, Long bookingId);
     void cancel(Long userId, Long bookingId);
     void updateStatus(Long bookingId, String status);
+    void assign(Long bookingId, Long staffUserId);
+    void complete(Long bookingId, String feedback);
+    void feedback(Long userId, Long bookingId, String feedback);
 }

@@ -17,6 +17,9 @@ public class ApplicationForm {
 
     private Long userId;
 
+    /** Resident profile for the real service target. */
+    private Long profileId;
+
     private Long itemId;
 
     /** 代理人用户 ID（家属代办时填写） */

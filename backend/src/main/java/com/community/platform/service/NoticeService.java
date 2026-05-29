@@ -9,4 +9,5 @@ public interface NoticeService {
     void markAllRead(Long userId);
     Long getUnreadCount(Long userId);
     void sendNotice(Long userId, String title, String content, String type, Long refId);
+    void sendNotice(Long userId, String title, String content, String type, String refType, Long refId);
 }

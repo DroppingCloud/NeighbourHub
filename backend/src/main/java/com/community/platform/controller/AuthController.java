@@ -2,6 +2,7 @@ package com.community.platform.controller;
 
 import com.community.platform.common.Result;
 import com.community.platform.dto.auth.LoginDTO;
+import com.community.platform.dto.auth.ProfileUpdateDTO;
 import com.community.platform.dto.auth.RegisterDTO;
 import com.community.platform.service.AuthService;
 import com.community.platform.vo.auth.LoginVO;
@@ -45,5 +46,13 @@ public class AuthController {
     @GetMapping("/me")
     public Result<UserInfoVO> getMe(@AuthenticationPrincipal Long userId) {
         return Result.success(authService.getMe(userId));
+    }
+
+    @Operation(summary = "更新当前用户个人信息")
+    @PutMapping("/me")
+    public Result<Void> updateMe(@AuthenticationPrincipal Long userId,
+                                 @RequestBody ProfileUpdateDTO dto) {
+        authService.updateMe(userId, dto);
+        return Result.success();
     }
 }

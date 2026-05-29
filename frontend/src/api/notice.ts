@@ -5,6 +5,7 @@ export interface NoticeVO {
   title: string
   content: string
   type: string
+  refType?: string
   refId?: number
   isRead: number
   createTime: string

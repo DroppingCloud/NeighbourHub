@@ -30,3 +30,12 @@ export const getBookingDetail = (id: number) =>
 
 export const cancelBooking = (id: number) =>
   request.put<any, void>(`/api/booking/${id}/cancel`)
+
+export const assignBooking = (id: number, staffUserId: number) =>
+  request.put<any, void>(`/api/booking/${id}/assign`, { staffUserId })
+
+export const completeBooking = (id: number, feedback?: string) =>
+  request.put<any, void>(`/api/booking/${id}/complete`, { feedback })
+
+export const submitBookingFeedback = (id: number, feedback: string) =>
+  request.post<any, void>(`/api/booking/${id}/feedback`, { feedback })

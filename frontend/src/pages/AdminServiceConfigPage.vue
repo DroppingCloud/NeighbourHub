@@ -1,103 +1,207 @@
 <template>
-  <el-card>
-    <template #header>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span>事项配置管理</span>
-        <el-button type="primary" @click="showDialog(null)">新增事项</el-button>
-      </div>
-    </template>
-    <el-table :data="list" v-loading="loading" stripe>
-      <el-table-column prop="itemCode" label="事项编码" width="120" />
+  <div class="admin-page">
+    <div class="page-header">
+      <h2>事项配置</h2>
+      <el-button type="primary" @click="openCreate">新增事项</el-button>
+    </div>
+
+    <el-table v-loading="loading" :data="items" border>
+      <el-table-column prop="itemId" label="ID" width="80" />
       <el-table-column prop="itemName" label="事项名称" />
-      <el-table-column prop="category" label="分类" width="100" />
-      <el-table-column label="状态" width="80">
+      <el-table-column prop="itemCode" label="编码" width="160" />
+      <el-table-column prop="category" label="分类" width="120" />
+      <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.status === 'online' ? 'success' : 'info'">{{ row.status === 'online' ? '上线' : '下线' }}</el-tag>
+          <el-tag :type="row.status === 'online' ? 'success' : 'info'">{{ row.status }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="160">
+      <el-table-column label="操作" width="220">
         <template #default="{ row }">
-          <el-button type="primary" link @click="showDialog(row)">编辑</el-button>
-          <el-popconfirm title="确认删除此事项？" @confirm="handleDelete(row.itemId)">
-            <template #reference>
-              <el-button type="danger" link>删除</el-button>
-            </template>
-          </el-popconfirm>
+          <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button link type="primary" @click="openMaterials(row)">材料</el-button>
+          <el-button link type="danger" @click="remove(row.itemId)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editItem ? '编辑事项' : '新增事项'" width="600px">
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="事项编码"><el-input v-model="form.itemCode" /></el-form-item>
-        <el-form-item label="事项名称"><el-input v-model="form.itemName" /></el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="form.category">
-            <el-option label="证明" value="证明" />
-            <el-option label="补贴" value="补贴" />
-            <el-option label="证件" value="证件" />
-            <el-option label="服务" value="服务" />
+    <el-dialog v-model="formVisible" :title="editingId ? '编辑事项' : '新增事项'" width="600px">
+      <el-form :model="form" label-width="6rem">
+        <el-form-item label="名称"><el-input v-model="form.itemName" /></el-form-item>
+        <el-form-item label="编码"><el-input v-model="form.itemCode" /></el-form-item>
+        <el-form-item label="分类"><el-input v-model="form.category" /></el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="form.status" style="width: 100%">
+            <el-option label="online" value="online" />
+            <el-option label="offline" value="offline" />
           </el-select>
         </el-form-item>
         <el-form-item label="说明"><el-input v-model="form.description" type="textarea" /></el-form-item>
-        <el-form-item label="状态">
-          <el-radio-group v-model="form.status">
-            <el-radio value="online">上线</el-radio>
-            <el-radio value="offline">下线</el-radio>
-          </el-radio-group>
-        </el-form-item>
+        <el-form-item label="条件"><el-input v-model="form.conditions" type="textarea" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+        <el-button @click="formVisible = false">取消</el-button>
+        <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
-  </el-card>
+
+    <el-dialog v-model="materialVisible" title="材料模板" width="700px">
+      <div class="material-toolbar">
+        <el-input v-model="materialForm.materialName" placeholder="材料名称" />
+        <el-input v-model="materialForm.materialType" placeholder="类型编码" />
+        <el-button type="primary" @click="addMaterial">添加</el-button>
+      </div>
+      <el-table :data="materials" border>
+        <el-table-column prop="materialName" label="材料名称" />
+        <el-table-column prop="materialType" label="类型编码" />
+        <el-table-column prop="isRequired" label="必填" width="80" />
+        <el-table-column label="操作" width="100">
+          <template #default="{ row }">
+            <el-button link type="danger" @click="removeMaterial(row.templateId)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getServiceItemList, createServiceItem, updateServiceItem, deleteServiceItem } from '@/api/serviceItem'
-import { ElMessage } from 'element-plus'
+import { onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  createMaterialTemplate,
+  createServiceItem,
+  deleteMaterialTemplate,
+  deleteServiceItem,
+  getMaterialTemplates,
+  getServiceItemList,
+  updateServiceItem,
+  type MaterialTemplateVO,
+  type ServiceItemRequest,
+  type ServiceItemVO
+} from '@/api/serviceItem'
 
 const loading = ref(false)
-const saving = ref(false)
-const dialogVisible = ref(false)
-const list = ref<any[]>([])
-const editItem = ref<any>(null)
-const form = ref<any>({ itemCode: '', itemName: '', category: '证明', description: '', status: 'online' })
+const items = ref<ServiceItemVO[]>([])
+const formVisible = ref(false)
+const materialVisible = ref(false)
+const editingId = ref<number | null>(null)
+const currentItemId = ref<number | null>(null)
+const materials = ref<MaterialTemplateVO[]>([])
 
-const showDialog = (item: any) => {
-  editItem.value = item
-  form.value = item ? { ...item } : { itemCode: '', itemName: '', category: '证明', description: '', status: 'online' }
-  dialogVisible.value = true
-}
+const form = ref<ServiceItemRequest>({
+  itemName: '',
+  itemCode: '',
+  category: '',
+  description: '',
+  conditions: '',
+  status: 'online'
+})
 
-const handleSave = async () => {
-  saving.value = true
-  try {
-    if (editItem.value) { await updateServiceItem(editItem.value.itemId, form.value) }
-    else { await createServiceItem(form.value) }
-    ElMessage.success('保存成功')
-    dialogVisible.value = false
-    loadData()
-  } finally { saving.value = false }
-}
+const materialForm = ref({
+  materialName: '',
+  materialType: ''
+})
 
-const handleDelete = async (id: number) => {
-  await deleteServiceItem(id)
-  ElMessage.success('删除成功')
-  loadData()
-}
-
-const loadData = async () => {
+async function loadItems() {
   loading.value = true
   try {
-    const res = await getServiceItemList({ pageSize: 100 })
-    list.value = res.records || []
-  } finally { loading.value = false }
+    const page = await getServiceItemList({ pageNum: 1, pageSize: 100 })
+    items.value = page.records || []
+  } finally {
+    loading.value = false
+  }
 }
 
-onMounted(loadData)
+function openCreate() {
+  editingId.value = null
+  form.value = { itemName: '', itemCode: '', category: '', description: '', conditions: '', status: 'online' }
+  formVisible.value = true
+}
+
+function openEdit(row: ServiceItemVO) {
+  editingId.value = row.itemId
+  form.value = {
+    itemName: row.itemName,
+    itemCode: row.itemCode,
+    category: row.category,
+    description: row.description,
+    conditions: row.conditions,
+    status: row.status
+  }
+  formVisible.value = true
+}
+
+async function save() {
+  if (editingId.value) {
+    await updateServiceItem(editingId.value, form.value)
+    ElMessage.success('事项已更新')
+  } else {
+    await createServiceItem(form.value)
+    ElMessage.success('事项已创建')
+  }
+  formVisible.value = false
+  await loadItems()
+}
+
+async function remove(id: number) {
+  await ElMessageBox.confirm('确定删除该事项吗？', '提示', { type: 'warning' })
+  await deleteServiceItem(id)
+  ElMessage.success('事项已删除')
+  await loadItems()
+}
+
+async function openMaterials(row: ServiceItemVO) {
+  currentItemId.value = row.itemId
+  materialVisible.value = true
+  materials.value = await getMaterialTemplates(row.itemId)
+}
+
+async function addMaterial() {
+  if (!currentItemId.value || !materialForm.value.materialName) return
+  await createMaterialTemplate({
+    itemId: currentItemId.value,
+    materialName: materialForm.value.materialName,
+    materialType: materialForm.value.materialType,
+    isRequired: 1,
+    sortOrder: materials.value.length + 1
+  })
+  ElMessage.success('材料模板已添加')
+  materials.value = await getMaterialTemplates(currentItemId.value)
+  materialForm.value = { materialName: '', materialType: '' }
+}
+
+async function removeMaterial(id: number) {
+  await deleteMaterialTemplate(id)
+  ElMessage.success('材料模板已删除')
+  if (currentItemId.value) materials.value = await getMaterialTemplates(currentItemId.value)
+}
+
+onMounted(loadItems)
 </script>
+
+<style scoped>
+.admin-page {
+  max-width: 75rem;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-header h2 {
+  font-size: 1.5rem;
+  color: var(--text-primary);
+}
+
+.material-toolbar {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+</style>

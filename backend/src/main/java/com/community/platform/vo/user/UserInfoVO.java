@@ -2,6 +2,7 @@ package com.community.platform.vo.user;
 
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -27,4 +28,8 @@ public class UserInfoVO {
     private String address;
 
     private Integer age;
+
+    private String gender;
+
+    private LocalDate birthday;
 }

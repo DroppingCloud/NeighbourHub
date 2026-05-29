@@ -37,4 +37,6 @@ public class WorkOrder {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    private LocalDateTime finishTime;
 }

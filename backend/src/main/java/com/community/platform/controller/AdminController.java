@@ -3,12 +3,17 @@ package com.community.platform.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.community.platform.common.Result;
 import com.community.platform.entity.ServiceItem;
+import com.community.platform.entity.ServiceMaterialTemplate;
+import com.community.platform.service.AdminUserService;
 import com.community.platform.service.ServiceItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
 
 @Tag(name = "管理后台")
 @RestController
@@ -18,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminController {
 
     private final ServiceItemService serviceItemService;
+    private final AdminUserService adminUserService;
 
     @Operation(summary = "事项列表")
     @GetMapping("/service-item/list")
@@ -27,6 +33,12 @@ public class AdminController {
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
         return Result.success(serviceItemService.getList(category, status, pageNum, pageSize));
+    }
+
+    @Operation(summary = "事项详情")
+    @GetMapping("/service-item/{id}")
+    public Result<ServiceItem> getServiceItem(@PathVariable Long id) {
+        return Result.success(serviceItemService.getDetail(id));
     }
 
     @Operation(summary = "创建事项")
@@ -48,5 +60,41 @@ public class AdminController {
     public Result<Void> deleteServiceItem(@PathVariable Long id) {
         serviceItemService.delete(id);
         return Result.success();
+    }
+
+    @Operation(summary = "事项材料模板列表")
+    @GetMapping("/service-item/{itemId}/materials")
+    public Result<List<ServiceMaterialTemplate>> listMaterials(@PathVariable Long itemId) {
+        return Result.success(serviceItemService.getMaterials(itemId));
+    }
+
+    @Operation(summary = "创建材料模板")
+    @PostMapping("/material-template")
+    public Result<Long> createMaterialTemplate(@RequestBody ServiceMaterialTemplate template) {
+        return Result.success(serviceItemService.createMaterialTemplate(template));
+    }
+
+    @Operation(summary = "更新材料模板")
+    @PutMapping("/material-template/{id}")
+    public Result<Void> updateMaterialTemplate(@PathVariable Long id, @RequestBody ServiceMaterialTemplate template) {
+        template.setTemplateId(id);
+        serviceItemService.updateMaterialTemplate(template);
+        return Result.success();
+    }
+
+    @Operation(summary = "删除材料模板")
+    @DeleteMapping("/material-template/{id}")
+    public Result<Void> deleteMaterialTemplate(@PathVariable Long id) {
+        serviceItemService.deleteMaterialTemplate(id);
+        return Result.success();
+    }
+
+    @Operation(summary = "用户列表")
+    @GetMapping("/user/list")
+    public Result<Page<Map<String, Object>>> listUsers(
+            @RequestParam(required = false) String role,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        return Result.success(adminUserService.getUserList(role, pageNum, pageSize));
     }
 }

@@ -5,6 +5,7 @@ import com.community.platform.common.BusinessException;
 import com.community.platform.common.ResultCode;
 import com.community.platform.common.utils.JwtUtil;
 import com.community.platform.dto.auth.LoginDTO;
+import com.community.platform.dto.auth.ProfileUpdateDTO;
 import com.community.platform.dto.auth.RegisterDTO;
 import com.community.platform.entity.ResidentProfile;
 import com.community.platform.entity.User;
@@ -121,7 +122,39 @@ public class AuthServiceImpl implements AuthService {
             vo.setIdCard(profile.getIdCard());
             vo.setAddress(profile.getAddress());
             vo.setAge(profile.getAge());
+            vo.setGender(profile.getGender());
+            vo.setBirthday(profile.getBirthday());
         }
         return vo;
+    }
+
+    @Override
+    @Transactional
+    public void updateMe(Long userId, ProfileUpdateDTO dto) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.ACCOUNT_NOT_EXISTS);
+        }
+        user.setEmail(dto.getEmail());
+        userMapper.updateById(user);
+
+        ResidentProfile profile = residentProfileMapper.selectOne(
+                new LambdaQueryWrapper<ResidentProfile>().eq(ResidentProfile::getUserId, userId));
+        if (profile == null) {
+            profile = new ResidentProfile();
+            profile.setUserId(userId);
+            profile.setRealName(dto.getRealName() == null || dto.getRealName().isBlank() ? user.getUsername() : dto.getRealName());
+            profile.setResidentType("local");
+            profile.setAddress(dto.getAddress());
+            profile.setGender(dto.getGender());
+            profile.setBirthday(dto.getBirthday());
+            residentProfileMapper.insert(profile);
+            return;
+        }
+        profile.setRealName(dto.getRealName());
+        profile.setAddress(dto.getAddress());
+        profile.setGender(dto.getGender());
+        profile.setBirthday(dto.getBirthday());
+        residentProfileMapper.updateById(profile);
     }
 }

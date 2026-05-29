@@ -17,6 +17,12 @@ public class ServiceBooking {
 
     private Long userId;
 
+    /** Resident profile for the real service target. */
+    private Long profileId;
+
+    /** Proxy user ID when a family member books for a resident. */
+    private Long proxyUserId;
+
     /** 服务类型: dining/accompany/home_visit */
     private String serviceType;
 
@@ -36,11 +42,18 @@ public class ServiceBooking {
 
     private String remark;
 
+    /** Assigned staff user ID. */
+    private Long staffUserId;
+
+    private String feedback;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    private LocalDateTime completeTime;
 
     @TableLogic
     private Integer deleted;
