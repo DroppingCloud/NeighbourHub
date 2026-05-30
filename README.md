@@ -85,6 +85,14 @@ docker compose down
 docker compose down -v
 ```
 
+**重建数据库（适用于数据库大规模更新）**
+```                          
+# 删除原数据库                
+docker exec community_mysql mysql -uappuser -papp_password_123 -e "DROP DATABASE community_service;"
+# 重建数据库
+docker exec community_mysql mysql -uappuser -papp_password_123 < doc/database/init.sql   
+```
+
 ### 3.2 启动后端
 
 在项目根目录执行：
