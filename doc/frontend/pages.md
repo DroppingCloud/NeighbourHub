@@ -14,8 +14,8 @@
 | `/settings` | `SettingsPage.vue` | 系统设置 | 登录用户 | 已实现 | 字体大小、关怀模式等偏好设置 |
 | `/guide` | `GuidePage.vue` | 智能导办 | 居民/家属 | 基础实现 | 导办问答、事项推荐入口；当前偏规则化实现 |
 | `/application/submit` | `ApplicationSubmitPage.vue` | 提交申请 | 居民/家属 | 已实现 | 选择事项、填写申请、提交事项申请 |
-| `/application/list` | `ApplicationListPage.vue` | 我的申请 | 居民/家属 | 已实现 | 查看申请记录、按状态筛选 |
-| `/material-upload` | `MaterialUploadPage.vue` | 材料上传 | 居民/家属 | 基础实现 | 登记申请材料，当前主要处理材料元数据 |
+| `/application/list` | `ApplicationListPage.vue` | 我的申请 | 居民/家属 | 已实现 | 查看申请记录、按状态筛选、补件、撤回、已撤回后重新提交 |
+| `/material-upload` | `MaterialUploadPage.vue` | 材料上传 | 居民/家属 | 已增强 | 展示材料清单、必需标识、格式要求、正式模板预览/下载、规则型智能预审、补件和已撤回申请重新提交 |
 | `/booking` | `BookingPage.vue` | 服务预约 | 居民/家属 | 已实现 | 创建社区服务预约 |
 | `/booking/list` | `BookingListPage.vue` | 我的预约 | 居民/家属 | 已实现 | 查看预约列表、取消预约 |
 | `/family-binding` | `FamilyBindingPage.vue` | 家属代办 | 居民/家属 | 已实现 | 创建、查看和撤销家属代办授权 |
@@ -54,8 +54,8 @@
 |---|---|---|
 | `LoginPage.vue`、`RegisterPage.vue`、`ProfilePage.vue` | `api/auth.ts` | 登录、注册、当前用户、资料更新 |
 | `GuidePage.vue` | `api/guide.ts` | 导办推荐和对话 |
-| `ApplicationSubmitPage.vue`、`ApplicationListPage.vue`、`ProgressPage.vue` | `api/application.ts`、`api/serviceItem.ts` | 事项列表、申请提交、申请查询 |
-| `MaterialUploadPage.vue` | `api/application.ts` | 材料登记、材料查询、预审更新 |
+| `ApplicationSubmitPage.vue`、`ApplicationListPage.vue`、`ProgressPage.vue` | `api/application.ts`、`api/serviceItem.ts` | 事项列表、申请提交、申请查询、撤回申请 |
+| `MaterialUploadPage.vue`、`utils/materialTemplateLibrary.ts` | `api/application.ts` | 材料登记、材料查询、正式材料模板预览/下载、规则型预审、预审结果更新、补件重新提交、撤回后重新提交 |
 | `BookingPage.vue`、`BookingListPage.vue`、`ServiceBookingsStaffPage.vue` | `api/booking.ts` | 预约创建、查询、取消、分配、完成 |
 | `FamilyBindingPage.vue` | `api/user.ts` | 家属绑定、授权列表、撤销授权 |
 | `NoticePage.vue`、`NotificationBell.vue` | `api/notice.ts` | 通知列表、未读数、标记已读 |
@@ -68,6 +68,6 @@
 
 - `ServiceResourcePage.vue` 是占位说明页，不再使用本地模拟数据；完整服务资源排班需要后端补表和接口后再启用。
 - `GuidePage.vue` 当前可作为导办入口演示，但智能程度有限，尚不是完整大模型导办。
-- `MaterialUploadPage.vue` 当前以材料元数据登记为主，真实文件上传、文件预览和 OCR 仍需后续补充。
+- `MaterialUploadPage.vue` 已支持规则型智能预审和正式模板预览/下载；模板内容内置于 `utils/materialTemplateLibrary.ts`，已按 `材料模板示例.md` 对齐 17 份模板：房屋租赁合同、不动产权证书、购房合同、单位住宿证明、工商营业执照、劳动合同、劳动关系证明、学生证、连续就读证明、高龄津贴申请表、亲属关系证明、社区居住证明、无犯罪记录证明、低收入/困难证明、同一人身份证明、申请事由说明、助餐服务申请表。OCR 服务仍需后续补充。
 - `StatisticsDashboardPage.vue` 已调用真实统计接口，但图表依赖较大，生产环境可考虑按需拆包。
 - 页面文案若在 PowerShell 中显示乱码，优先以 VS Code UTF-8 显示为准；若浏览器页面实际乱码，则需要修复对应 `.vue` 文件源码。

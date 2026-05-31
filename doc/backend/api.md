@@ -18,20 +18,25 @@
 
 - `POST /api/application/submit`：提交申请。请求体：`itemId`、`proxyUserId`、`formData`、`remark`。写入 `application_form`，同时创建 `work_order` 并发送通知。
 - `GET /api/application/list`：申请列表。参数：`status`、`itemId`、`pageNum`、`pageSize`。
-- `GET /api/application/{id}`：申请详情，仅本人或代理人可查看。
-- `PUT /api/application/{id}/resubmit`：补件重新提交，仅 `supplement_required` 状态允许操作。
+- `GET /api/application/{id}`：申请详情，仅本人或代理人可查看。详情返回申请基本信息、事项名称、事项分类、状态中文、备注、材料列表、必需材料列表、材料完整性结果、工单状态和审核意见；材料列表中的 `fileUrl` 指向 `/api/application/material/{materialId}/file`。
+- `PUT /api/application/{id}/withdraw`：撤回申请。仅 `pending`、`approved`、`supplement_required` 状态允许撤回；撤回后申请状态变为 `cancelled`，前端显示“已撤回”。
+- `PUT /api/application/{id}/resubmit`：重新提交申请。`supplement_required` 状态用于补件重新提交，`cancelled` 状态用于已撤回申请修改后重新提交；重新提交后申请和工单状态恢复为 `pending`。
 
 ## 申请材料
 
 - `POST /api/application/{id}/materials`：登记申请材料元数据。请求体：`templateId`、`materialName`、`fileName`、`filePath`、`fileSize`、`fileType`。返回 `materialId`。
+- `POST /api/application/{id}/materials/file`：真实上传申请材料文件。`multipart/form-data` 参数：`templateId`、`materialName`、`file`。后端校验文件非空、大小不超过 20MB、格式仅允许 PDF/JPG/JPEG/PNG/DOC/DOCX，保存后登记 `application_material` 并返回 `materialId`。
 - `GET /api/application/{id}/materials`：查询申请单材料列表。
-- `PUT /api/application/material/{id}/precheck`：更新材料预审结果。请求体：`precheckStatus`、`precheckRemark`、`ocrText`。`precheckStatus` 可为 `pending`、`passed`、`failed`。
+- `GET /api/application/{id}/materials/completeness`：校验申请材料完整性。返回 `requiredCount`、`uploadedRequiredCount`、`complete`、`missingMaterialNames`。
+- `GET /api/application/material/{id}/file`：下载或预览申请材料文件。仅申请人、授权代办人、工作人员或管理员可访问。
+- `PUT /api/application/material/{id}/precheck`：更新材料预审结果。请求体：`precheckStatus`、`precheckRemark`、`ocrText`。`precheckStatus` 可为 `pending`、`passed`、`failed`。仅申请人、授权代办人、工作人员或管理员可更新。当前前端会先执行规则型预审，包括必需材料完整性、文件扩展名、大小限制、空文件、图片分辨率、PDF/DOCX 文件头等检查，再把预审结论写回后端；OCR 内容识别字段已保留，后续可接入真实 OCR 服务。
+- 材料模板预览/下载：当前由前端 `utils/materialTemplateLibrary.ts` 根据材料名称和 `materialType` 匹配内置正式模板；若后台 `sampleUrl` 有值，则优先使用后台模板文件。身份证、户口本、医保卡等官方证件类材料不生成模板，仅提示上传原件照片或 PDF。
 
 ## 工单管理
 
-- `GET /api/workorder/list`：工单列表。参数：`status`、`staffUserId`、`pageNum`、`pageSize`。
-- `GET /api/workorder/{id}`：工单详情。
-- `POST /api/workorder/audit`：审核工单。请求体：`orderId`、`action`、`opinion`。`action` 支持 `approved`、`rejected`、`supplement_required`、`completed`、`processing`。
+- `GET /api/workorder/list`：工单列表。参数：`status`、`staffUserId`、`pageNum`、`pageSize`。返回中包含 `materialCompleteness`，用于工作人员判断材料是否齐全。
+- `GET /api/workorder/{id}`：工单详情。返回中包含 `materialCompleteness`。
+- `POST /api/workorder/audit`：审核工单。请求体：`orderId`、`action`、`opinion`。`action` 支持 `approved`、`rejected`、`supplement_required`、`completed`、`processing`。当 `action` 为 `approved` 或 `completed` 时，后端会校验必填材料是否齐全，并拦截任何预审未通过的材料；若缺少材料或存在预审失败材料，则返回参数错误。`supplement_required` 会把缺失材料名称自动追加到审核意见中。
 - `GET /api/workorder/{id}/logs`：查询工单操作日志。
 
 ## 服务预约
@@ -67,6 +72,13 @@
 - `POST /api/admin/material-template`：创建材料模板。字段：`itemId`、`materialName`、`materialType`、`description`、`sampleUrl`、`isRequired`、`sortOrder`。
 - `PUT /api/admin/material-template/{id}`：更新材料模板。
 - `DELETE /api/admin/material-template/{id}`：删除材料模板。
+
+## 申请与材料联调说明
+
+- 前端 `MaterialUploadPage.vue` 在正式提交申请后，会通过 `POST /api/application/{id}/materials/file` 上传真实文件，随后写入规则型预审结果，并调用 `GET /api/application/{id}/materials/completeness` 做后端兜底校验。
+- 后端完整性校验以 `service_material_template.is_required = 1` 为准，只统计当前申请事项下已上传且预审状态不是 `failed` 的必填材料。
+- 工作人员在 `POST /api/workorder/audit` 中执行 `approved` 或 `completed` 时，后端会再次执行材料完整性校验；若缺少必填材料，接口返回 `400` 和缺失材料名称。
+- 当前已支持本地文件真实保存和权限控制，保存目录由 `MATERIAL_UPLOAD_DIR` 或 `app.upload.material-dir` 配置。OCR/AI 预审仍为后续增强。
 
 ## 统计分析
 

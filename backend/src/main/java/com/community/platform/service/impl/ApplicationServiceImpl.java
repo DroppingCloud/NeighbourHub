@@ -8,29 +8,47 @@ import com.community.platform.common.ResultCode;
 import com.community.platform.dto.application.ApplicationQueryDTO;
 import com.community.platform.dto.application.ApplicationSubmitDTO;
 import com.community.platform.entity.ApplicationForm;
+import com.community.platform.entity.ApplicationMaterial;
 import com.community.platform.entity.ServiceItem;
+import com.community.platform.entity.ServiceMaterialTemplate;
+import com.community.platform.entity.User;
 import com.community.platform.entity.WorkOrder;
 import com.community.platform.mapper.ApplicationFormMapper;
+import com.community.platform.mapper.ApplicationMaterialMapper;
 import com.community.platform.mapper.ServiceItemMapper;
+import com.community.platform.mapper.ServiceMaterialTemplateMapper;
+import com.community.platform.mapper.UserMapper;
 import com.community.platform.mapper.WorkOrderMapper;
+import com.community.platform.service.ApplicationMaterialService;
 import com.community.platform.service.ApplicationService;
 import com.community.platform.service.NoticeService;
 import com.community.platform.vo.application.ApplicationVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 @Service
 @RequiredArgsConstructor
 public class ApplicationServiceImpl implements ApplicationService {
 
     private final ApplicationFormMapper applicationFormMapper;
+    private final ApplicationMaterialMapper applicationMaterialMapper;
     private final ServiceItemMapper serviceItemMapper;
+    private final ServiceMaterialTemplateMapper materialTemplateMapper;
     private final WorkOrderMapper workOrderMapper;
+    private final UserMapper userMapper;
     private final NoticeService noticeService;
+    private final ApplicationMaterialService applicationMaterialService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -73,7 +91,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 new Page<>(page(query.getPageNum()), size(query.getPageSize())), wrapper);
 
         Page<ApplicationVO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
-        result.setRecords(page.getRecords().stream().map(this::toApplicationVO).toList());
+        result.setRecords(page.getRecords().stream().map(application -> toApplicationVO(application, false)).toList());
         return result;
     }
 
@@ -83,7 +101,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!userId.equals(application.getUserId()) && !userId.equals(application.getProxyUserId())) {
             throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
         }
-        return toApplicationVO(application);
+        return toApplicationVO(application, true);
     }
 
     @Override
@@ -93,27 +111,77 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!userId.equals(application.getUserId()) && !userId.equals(application.getProxyUserId())) {
             throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
         }
-        if (!"supplement_required".equals(application.getStatus())) {
+
+        String previousStatus = application.getStatus();
+        if (!Set.of("supplement_required", "cancelled").contains(previousStatus)) {
             throw new BusinessException(ResultCode.APPLICATION_STATUS_ERROR);
         }
+
         application.setFormData(toJson(dto.getFormData()));
         application.setRemark(dto.getRemark());
         application.setStatus("pending");
         applicationFormMapper.updateById(application);
+
+        restoreWorkOrder(applicationId);
+
+        noticeService.sendNotice(
+                application.getUserId(),
+                "cancelled".equals(previousStatus) ? "申请已重新提交" : "补件已重新提交",
+                "您的申请已重新提交，等待工作人员审核。",
+                "system",
+                "application",
+                applicationId);
+    }
+
+    @Override
+    @Transactional
+    public void withdraw(Long userId, Long applicationId) {
+        ApplicationForm application = requireApplication(applicationId);
+        if (!userId.equals(application.getUserId()) && !userId.equals(application.getProxyUserId())) {
+            throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
+        }
+        if (!Set.of("pending", "approved", "supplement_required").contains(application.getStatus())) {
+            throw new BusinessException(ResultCode.APPLICATION_STATUS_ERROR);
+        }
+
+        application.setStatus("cancelled");
+        application.setRemark(StringUtils.hasText(application.getRemark())
+                ? application.getRemark()
+                : "用户已撤回申请");
+        applicationFormMapper.updateById(application);
+
+        workOrderMapper.update(null, new LambdaUpdateWrapper<WorkOrder>()
+                .eq(WorkOrder::getApplicationId, applicationId)
+                .set(WorkOrder::getStatus, "cancelled")
+                .set(WorkOrder::getAuditOpinion, "用户已撤回申请")
+                .set(WorkOrder::getFinishTime, null));
+
+        noticeService.sendNotice(
+                application.getUserId(),
+                "申请已撤回",
+                "您的申请已撤回，可在我的申请中修改材料后重新提交。",
+                "system",
+                "application",
+                applicationId);
+    }
+
+    private void restoreWorkOrder(Long applicationId) {
+        WorkOrder order = workOrderMapper.selectOne(new LambdaQueryWrapper<WorkOrder>()
+                .eq(WorkOrder::getApplicationId, applicationId)
+                .last("LIMIT 1"));
+        if (order == null) {
+            WorkOrder newOrder = new WorkOrder();
+            newOrder.setApplicationId(applicationId);
+            newOrder.setStatus("pending");
+            workOrderMapper.insert(newOrder);
+            return;
+        }
 
         workOrderMapper.update(null, new LambdaUpdateWrapper<WorkOrder>()
                 .eq(WorkOrder::getApplicationId, applicationId)
                 .set(WorkOrder::getStatus, "pending")
                 .set(WorkOrder::getAuditOpinion, null)
                 .set(WorkOrder::getFinishTime, null));
-
-        noticeService.sendNotice(
-                application.getUserId(),
-                "补件已重新提交",
-                "您的申请已重新提交，等待工作人员再次审核。",
-                "system",
-                "application",
-                applicationId);
     }
 
     private ServiceItem requireOnlineItem(Long itemId) {
@@ -135,8 +203,13 @@ public class ApplicationServiceImpl implements ApplicationService {
         return application;
     }
 
-    private ApplicationVO toApplicationVO(ApplicationForm application) {
+    private ApplicationVO toApplicationVO(ApplicationForm application, boolean detail) {
         ServiceItem item = serviceItemMapper.selectById(application.getItemId());
+        WorkOrder order = workOrderMapper.selectOne(new LambdaQueryWrapper<WorkOrder>()
+                .eq(WorkOrder::getApplicationId, application.getApplicationId())
+                .last("LIMIT 1"));
+        User staff = order == null || order.getStaffUserId() == null ? null : userMapper.selectById(order.getStaffUserId());
+
         ApplicationVO vo = new ApplicationVO();
         vo.setApplicationId(application.getApplicationId());
         vo.setItemId(application.getItemId());
@@ -148,7 +221,62 @@ public class ApplicationServiceImpl implements ApplicationService {
         vo.setUpdateTime(application.getUpdateTime());
         vo.setRemark(application.getRemark());
         vo.setIsProxy(application.getProxyUserId() != null);
+        vo.setOrderId(order == null ? null : order.getOrderId());
+        vo.setWorkOrderStatus(order == null ? null : order.getStatus());
+        vo.setWorkOrderStatusLabel(order == null ? null : statusLabel(order.getStatus()));
+        vo.setAuditOpinion(order == null ? null : order.getAuditOpinion());
+        vo.setStaffName(staff == null ? null : staff.getUsername());
+        vo.setMaterialCompleteness(applicationMaterialService.checkCompletenessForSystem(application.getApplicationId()));
+
+        if (detail) {
+            vo.setFormData(application.getFormData());
+            vo.setMaterials(listMaterials(application.getApplicationId()));
+            vo.setRequiredMaterials(listRequiredMaterials(application.getItemId()));
+        }
         return vo;
+    }
+
+    private List<Map<String, Object>> listMaterials(Long applicationId) {
+        List<ApplicationMaterial> materials = applicationMaterialMapper.selectList(new LambdaQueryWrapper<ApplicationMaterial>()
+                .eq(ApplicationMaterial::getApplicationId, applicationId)
+                .orderByAsc(ApplicationMaterial::getMaterialId));
+        return materials.stream().map(material -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("materialId", material.getMaterialId());
+            row.put("applicationId", material.getApplicationId());
+            row.put("templateId", material.getTemplateId());
+            row.put("materialName", material.getMaterialName());
+            row.put("fileName", material.getFileName());
+            row.put("filePath", material.getFilePath());
+            row.put("fileUrl", "/api/application/material/" + material.getMaterialId() + "/file");
+            row.put("fileSize", material.getFileSize());
+            row.put("fileType", material.getFileType());
+            row.put("precheckStatus", material.getPrecheckStatus());
+            row.put("precheckRemark", material.getPrecheckRemark());
+            row.put("ocrText", material.getOcrText());
+            row.put("uploadTime", material.getUploadTime());
+            return row;
+        }).toList();
+    }
+
+    private List<Map<String, Object>> listRequiredMaterials(Long itemId) {
+        List<ServiceMaterialTemplate> templates = materialTemplateMapper.selectList(
+                new LambdaQueryWrapper<ServiceMaterialTemplate>()
+                        .eq(ServiceMaterialTemplate::getItemId, itemId)
+                        .orderByAsc(ServiceMaterialTemplate::getSortOrder)
+                        .orderByAsc(ServiceMaterialTemplate::getTemplateId));
+        return templates.stream().map(template -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("templateId", template.getTemplateId());
+            row.put("itemId", template.getItemId());
+            row.put("materialName", template.getMaterialName());
+            row.put("materialType", template.getMaterialType());
+            row.put("description", template.getDescription());
+            row.put("sampleUrl", template.getSampleUrl());
+            row.put("isRequired", template.getIsRequired());
+            row.put("sortOrder", template.getSortOrder());
+            return row;
+        }).toList();
     }
 
     private String toJson(Object data) {
@@ -162,14 +290,28 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
     }
 
+    @SuppressWarnings("unused")
+    private Map<String, Object> parseJson(String json) {
+        if (!StringUtils.hasText(json)) {
+            return Collections.emptyMap();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (JsonProcessingException e) {
+            return Collections.emptyMap();
+        }
+    }
+
     private String statusLabel(String status) {
         return switch (status) {
             case "pending" -> "待审核";
             case "approved" -> "已通过";
             case "rejected" -> "已驳回";
-            case "supplement_required" -> "需补件";
+            case "supplement_required" -> "待补件";
             case "supplementing" -> "补件中";
             case "completed" -> "已办结";
+            case "processing" -> "处理中";
+            case "cancelled" -> "已撤回";
             default -> status;
         };
     }

@@ -263,3 +263,41 @@
 | `staff01` | `ROLE_STAFF` | `13811111111` | `active` |
 | `resident01` | `ROLE_RESIDENT` | `13822222222` | `active` |
 | `family01` | `ROLE_FAMILY` | `13833333333` | `active` |
+
+## 重点表字段核对记录
+
+本次已按 `init.sql`、Entity、Mapper 和接口返回对象复核以下申请/材料主流程表：
+
+| 表名 | Entity | Mapper | 核对结论 |
+|---|---|---|---|
+| `resident_profile` | `ResidentProfile` | `ResidentProfileMapper` | 字段一致：`profile_id`、`user_id`、`real_name`、`id_card`、`address`、`age`、`gender`、`birthday`、`resident_type`、`create_time`、`update_time`。 |
+| `service_item` | `ServiceItem` | `ServiceItemMapper` | 字段一致：`item_id`、`item_name`、`item_code`、`category`、`description`、`conditions`、`process_steps`、`status`、`create_time`、`update_time`、`deleted`。 |
+| `service_material_template` | `ServiceMaterialTemplate` | `ServiceMaterialTemplateMapper` | 字段一致：`template_id`、`item_id`、`material_name`、`material_type`、`description`、`sample_url`、`is_required`、`sort_order`。 |
+| `application_form` | `ApplicationForm` | `ApplicationFormMapper` | 字段一致：`application_id`、`user_id`、`profile_id`、`item_id`、`proxy_user_id`、`status`、`form_data`、`remark`、`submit_time`、`update_time`、`deleted`。 |
+| `application_material` | `ApplicationMaterial` | `ApplicationMaterialMapper` | 字段一致：`material_id`、`application_id`、`template_id`、`material_name`、`file_name`、`file_path`、`file_size`、`file_type`、`ocr_text`、`precheck_status`、`precheck_remark`、`upload_time`。 |
+
+状态约定：
+
+- `application_form.status`：`pending`、`approved`、`rejected`、`supplement_required`、`supplementing`、`completed`、`cancelled`。
+- `application_material.precheck_status`：`pending`、`passed`、`failed`。
+- `work_order.status`：`pending`、`processing`、`approved`、`supplement_required`、`rejected`、`completed`、`cancelled`。
+
+## 文件上传与材料访问
+
+- 当前材料文件由后端 `POST /api/application/{id}/materials/file` 接收并保存到本地目录。
+- 保存目录默认是 `uploads/materials`，可通过环境变量 `MATERIAL_UPLOAD_DIR` 或配置项 `app.upload.material-dir` 修改。
+- `application_material.file_path` 保存相对路径，例如 `1001/uuid.pdf`；真实访问需要走 `GET /api/application/material/{id}/file`，后端会校验申请人、授权代办人、工作人员或管理员权限。
+- `application_material.file_type` 保存文件扩展名；当前后端允许 `pdf/jpg/jpeg/png/doc/docx`，大小不超过 20MB。
+- `ocr_text` 字段已预留，当前规则型预审不写入真实 OCR 结果。
+
+## 联调样例数据
+
+`init.sql` 目前补充了少量稳定样例，便于前后端联调。样例材料的 `file_path` 使用 `/mock/materials/...` 演示路径；通过真实上传接口提交的新材料会保存为后端本地相对路径。
+
+| 申请ID | 事项 | 申请状态 | 工单状态 | 材料样例 |
+|---|---|---|---|---|
+| `1001` | 居住证明开具 | `pending` | `pending` | 身份证明材料、社区居住证明 |
+| `1002` | 老年补贴申请 | `approved` | `approved` | 高龄津贴申请表、近期免冠两寸照片 |
+| `1003` | 居住证办理 | `supplement_required` | `supplement_required` | 房屋租赁合同；租赁期限信息不完整，用于补件演示 |
+
+这些样例不代表生产数据，只用于演示“待审核、已通过、待补件”和材料完整性校验。

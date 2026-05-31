@@ -1,15 +1,23 @@
 ﻿<template>
   <div class="material-upload-container">
     <div class="page-header">
-      <h2>材料上传与预审</h2>
-      <p>请按要求上传以下材料，系统将自动进行智能预审</p>
+      <h2>{{ pageTitle }}</h2>
+      <p>{{ pageDescription }}</p>
+    </div>
+
+    <div class="service-summary-card">
+      <div>
+        <span class="summary-label">当前办理事项</span>
+        <strong>{{ serviceName || '事项办理' }}</strong>
+      </div>
+      <el-tag effect="plain">{{ serviceCategory || '事项' }}</el-tag>
     </div>
 
     <div class="steps-wrapper">
       <el-steps :active="2" align-center finish-status="success">
         <el-step title="填写信息" />
         <el-step title="上传材料" />
-        <el-step title="提交申请" />
+        <el-step :title="isSupplementMode ? '重新提交' : '提交申请'" />
       </el-steps>
     </div>
 
@@ -56,8 +64,17 @@
             <div class="material-info">
               <span class="material-index">{{ index + 1 }}</span>
               <div class="material-detail">
-                <div class="material-name">{{ material.name }}</div>
-                <div class="material-format">支持 .jpg .png .pdf，最大20MB</div>
+                <div class="material-title-row">
+                  <span class="material-name">{{ material.name }}</span>
+                  <el-tag v-if="material.required" size="small" type="danger" effect="plain">必需</el-tag>
+                  <el-tag v-else size="small" effect="plain">可选</el-tag>
+                </div>
+                <div class="material-format">
+                  {{ material.description || material.hint }}
+                </div>
+                <div class="material-rule">
+                  支持 {{ material.allowedExtensions.map(ext => `.${ext}`).join(' / ') }}，最大 {{ material.maxSizeMb }}MB
+                </div>
               </div>
             </div>
             <div class="material-status">
@@ -80,9 +97,20 @@
           </div>
           
           <div class="material-body">
+            <div class="template-actions">
+              <el-button size="small" plain :disabled="material.noTemplateRequired" @click="previewTemplate(material)">
+                <el-icon><View /></el-icon> 查看模板
+              </el-button>
+              <el-button size="small" plain :disabled="material.noTemplateRequired" @click="downloadTemplate(material)">
+                <el-icon><Download /></el-icon> 下载模板
+              </el-button>
+              <span v-if="material.noTemplateRequired" class="template-note">证件原件上传，无需模板</span>
+              <span v-else-if="material.templateName" class="template-note">{{ material.templateName }}</span>
+            </div>
+
             <div v-if="!material.uploaded" class="upload-area" @click="triggerUpload(index)">
               <el-icon :size="32"><UploadFilled /></el-icon>
-              <span>点击或拖拽上传</span>
+              <span>{{ isSupplementMode ? '点击上传修改后的材料' : '点击或拖拽上传' }}</span>
               <span class="upload-hint">{{ material.hint }}</span>
             </div>
             
@@ -95,6 +123,9 @@
               <div class="file-actions">
                 <el-button link type="primary" @click.stop="previewFile(index)">
                   <el-icon><View /></el-icon> 预览
+                </el-button>
+                <el-button link type="primary" @click.stop="downloadFile(index)">
+                  <el-icon><Download /></el-icon> 下载
                 </el-button>
                 <el-button link type="danger" @click.stop="removeFile(index)">
                   <el-icon><Delete /></el-icon> 删除
@@ -110,6 +141,10 @@
               <ul>
                 <li v-for="(issue, idx) in material.issues" :key="idx">{{ issue }}</li>
               </ul>
+              <div v-if="material.suggestions.length" class="suggestion-box">
+                <strong>修改建议：</strong>
+                <span>{{ material.suggestions.join('；') }}</span>
+              </div>
               <el-button size="small" type="primary" plain @click="reUpload(index)">
                 重新上传
               </el-button>
@@ -117,7 +152,7 @@
             
             <div v-if="material.uploaded && material.precheckStatus === 'passed'" class="precheck-pass">
               <el-icon><SuccessFilled /></el-icon>
-              <span>材料通过预审，内容清晰完整</span>
+              <span>{{ material.precheckRemark || '材料通过预审，符合当前提交要求' }}</span>
             </div>
           </div>
         </div>
@@ -154,14 +189,14 @@
         :disabled="!allUploaded || hasFailedPrecheck"
         @click="submitMaterials"
       >
-        <el-icon><Check /></el-icon> 提交申请
+        <el-icon><Check /></el-icon> {{ submitButtonText }}
       </el-button>
     </div>
 
     <input 
       ref="fileInputRef" 
       type="file" 
-      accept=".jpg,.jpeg,.png,.pdf" 
+      :accept="currentAccept"
       style="display: none" 
       @change="handleFileSelect"
     />
@@ -170,48 +205,108 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Document, UploadFilled, View, Delete, CircleCheck, CircleClose,
-  Loading, WarningFilled, SuccessFilled, Back, Check
+  Loading, WarningFilled, SuccessFilled, Back, Check, Download
 } from '@element-plus/icons-vue'
 import {
+  getApplicationDetail,
+  getApplicationMaterialFileUrl,
+  resubmitApplication,
   submitApplication,
-  uploadApplicationMaterial,
+  checkApplicationMaterialCompleteness,
+  uploadApplicationMaterialFile,
   precheckApplicationMaterial
 } from '@/api/application'
+import {
+  isIdentityDocumentMaterial,
+  resolveBuiltInMaterialTemplate,
+  wrapMaterialTemplateHtml
+} from '@/utils/materialTemplateLibrary'
 
 const router = useRouter()
+const route = useRoute()
 
 // 定义材料项类型
 interface MaterialItem {
   id: string
+  templateId?: number | null
+  materialId?: number
   name: string
   hint: string
+  description: string
+  required: boolean
+  allowedExtensions: string[]
+  maxSizeMb: number
+  templateUrl?: string
+  templateName: string
+  templateHtml: string
+  noTemplateRequired: boolean
   uploaded: boolean
   uploading: boolean
+  dirty: boolean
+  file?: File
   fileName: string
   fileSize: number
   fileUrl: string
   precheckStatus: 'passed' | 'failed' | 'checking' | null
+  precheckRemark: string
   issues: string[]
+  suggestions: string[]
 }
 
 const currentMaterialIndex = ref(-1)
 const fileInputRef = ref<HTMLInputElement>()
 const submitting = ref(false)
+const isSupplementMode = ref(false)
+const supplementApplicationId = ref<number | null>(null)
+const existingApplicationMode = ref<'supplement' | 'resubmit'>('supplement')
+const defaultMaxSizeMb = 20
 
 // 表单数据（从上一页获取）
 const formData = ref({
   name: '',
   idCard: '',
   phone: '',
-  address: ''
+  address: '',
+  residenceStartDate: '',
+  employerName: '',
+  workAddress: '',
+  schoolName: '',
+  enrollmentDate: '',
+  applicationCondition: '',
+  applicationConditionLabel: '',
+  proofType: '',
+  proofLabel: '',
+  scenario: '',
+  scenarioLabel: ''
 })
 
 const serviceName = ref('')
 const serviceId = ref('')
+const serviceCategory = ref('')
+
+function emptyFormData() {
+  return {
+    name: '',
+    idCard: '',
+    phone: '',
+    address: '',
+    residenceStartDate: '',
+    employerName: '',
+    workAddress: '',
+    schoolName: '',
+    enrollmentDate: '',
+    applicationCondition: '',
+    applicationConditionLabel: '',
+    proofType: '',
+    proofLabel: '',
+    scenario: '',
+    scenarioLabel: ''
+  }
+}
 
 // 材料列表
 const materials = ref<MaterialItem[]>([
@@ -219,61 +314,124 @@ const materials = ref<MaterialItem[]>([
     id: 'idCard',
     name: '身份证',
     hint: '需上传正反面清晰照片',
+    description: '用于核验申请人身份信息',
+    required: true,
+    allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    maxSizeMb: defaultMaxSizeMb,
+    templateName: '',
+    templateHtml: '',
+    noTemplateRequired: true,
     uploaded: false,
     uploading: false,
+    dirty: false,
     fileName: '',
     fileSize: 0,
     fileUrl: '',
     precheckStatus: null,
-    issues: []
+    precheckRemark: '',
+    issues: [],
+    suggestions: []
   },
   {
     id: 'householdRegister',
     name: '户口本',
     hint: '需上传户主页和本人页',
+    description: '用于核验户籍信息',
+    required: true,
+    allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    maxSizeMb: defaultMaxSizeMb,
+    templateName: '',
+    templateHtml: '',
+    noTemplateRequired: true,
     uploaded: false,
     uploading: false,
+    dirty: false,
     fileName: '',
     fileSize: 0,
     fileUrl: '',
     precheckStatus: null,
-    issues: []
+    precheckRemark: '',
+    issues: [],
+    suggestions: []
   },
   {
     id: 'residenceProof',
     name: '居住证明',
     hint: '租房合同或房产证',
+    description: '用于核验当前居住地址',
+    required: true,
+    allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+    maxSizeMb: defaultMaxSizeMb,
+    templateName: '',
+    templateHtml: '',
+    noTemplateRequired: false,
     uploaded: false,
     uploading: false,
+    dirty: false,
     fileName: '',
     fileSize: 0,
     fileUrl: '',
     precheckStatus: null,
-    issues: []
+    precheckRemark: '',
+    issues: [],
+    suggestions: []
   },
   {
     id: 'photo',
     name: '近期免冠照片',
     hint: '白底或蓝底，2寸',
+    description: '用于办事材料归档或证件照采集',
+    required: false,
+    allowedExtensions: ['jpg', 'jpeg', 'png'],
+    maxSizeMb: defaultMaxSizeMb,
+    templateName: '证件照要求说明.doc',
+    templateHtml: '',
+    noTemplateRequired: false,
     uploaded: false,
     uploading: false,
+    dirty: false,
     fileName: '',
     fileSize: 0,
     fileUrl: '',
     precheckStatus: null,
-    issues: []
+    precheckRemark: '',
+    issues: [],
+    suggestions: []
   }
 ])
 
-const allUploaded = computed(() => materials.value.every(m => m.uploaded))
+const requiredMaterials = computed(() => materials.value.filter(m => m.required))
+const allUploaded = computed(() => requiredMaterials.value.every(m => m.uploaded))
 const hasFailedPrecheck = computed(() => materials.value.some(m => m.precheckStatus === 'failed'))
 const showOverallResult = computed(() => materials.value.some(m => m.uploaded))
+const currentAccept = computed(() => {
+  const material = materials.value[currentMaterialIndex.value]
+  const extensions = material?.allowedExtensions?.length
+    ? material.allowedExtensions
+    : ['jpg', 'jpeg', 'png', 'pdf']
+  return extensions.map(ext => `.${ext}`).join(',')
+})
+const pageTitle = computed(() => {
+  if (!isSupplementMode.value) return '材料上传与预审'
+  return existingApplicationMode.value === 'resubmit' ? '修改并重新提交' : '补交材料'
+})
+const pageDescription = computed(() => {
+  if (!isSupplementMode.value) return '请按要求上传以下材料，系统将自动进行智能预审'
+  return existingApplicationMode.value === 'resubmit'
+    ? '请检查并修改已撤回申请的材料，确认无误后重新提交'
+    : '请根据退回意见补充缺失或预审未通过的材料'
+})
+const submitButtonText = computed(() => {
+  if (!isSupplementMode.value) return '提交申请'
+  return existingApplicationMode.value === 'resubmit' ? '重新提交' : '提交补件'
+})
 
 const overallResult = computed(() => {
-  const uploadedCount = materials.value.filter(m => m.uploaded).length
-  const passedCount = materials.value.filter(m => m.precheckStatus === 'passed').length
+  const uploadedCount = requiredMaterials.value.filter(m => m.uploaded).length
+  const passedCount = requiredMaterials.value.filter(m => m.precheckStatus === 'passed').length
   const failedCount = materials.value.filter(m => m.precheckStatus === 'failed').length
   const checkingCount = materials.value.filter(m => m.precheckStatus === 'checking').length
+  const missingItems = requiredMaterials.value.filter(m => !m.uploaded).map(m => m.name)
   
   if (checkingCount > 0) {
     return {
@@ -295,8 +453,17 @@ const overallResult = computed(() => {
       failedItems
     }
   }
+
+  if (missingItems.length > 0) {
+    return {
+      passed: false,
+      title: '材料待补充',
+      desc: `还缺少 ${missingItems.length} 项必需材料，请补齐后再提交`,
+      failedItems: missingItems
+    }
+  }
   
-  if (uploadedCount === materials.value.length && passedCount === materials.value.length) {
+  if (uploadedCount === requiredMaterials.value.length && passedCount === requiredMaterials.value.length) {
     return {
       passed: true,
       title: '材料预审全部通过',
@@ -308,7 +475,7 @@ const overallResult = computed(() => {
   return {
     passed: false,
     title: '材料待补充',
-    desc: `已上传 ${uploadedCount}/${materials.value.length} 项材料`,
+    desc: `已上传 ${uploadedCount}/${requiredMaterials.value.length} 项必需材料`,
     failedItems: []
   }
 })
@@ -338,47 +505,181 @@ async function handleFileSelect(event: Event) {
   
   const material = materials.value[currentMaterialIndex.value]
   if (material.uploading) return
-  
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf']
-  if (!allowedTypes.includes(file.type)) {
-    ElMessage.error('请上传 JPG、PNG 或 PDF 格式的文件')
-    input.value = ''
-    return
-  }
-  
-  if (file.size > 20 * 1024 * 1024) {
-    ElMessage.error('文件大小不能超过 20MB')
-    input.value = ''
-    return
-  }
-  
+
   material.uploading = true
   material.precheckStatus = 'checking'
-  
-  handleLocalFilePrecheck(file, material)
-  
-  material.uploading = false
-  input.value = ''
+  material.issues = []
+  material.suggestions = []
+
+  try {
+    await handleLocalFilePrecheck(file, material)
+  } finally {
+    material.uploading = false
+    input.value = ''
+  }
 }
 
-function handleLocalFilePrecheck(file: File, material: MaterialItem) {
+async function handleLocalFilePrecheck(file: File, material: MaterialItem) {
+  const result = await runPrecheck(file, material)
   material.uploaded = true
+  material.dirty = true
   material.fileName = file.name
   material.fileSize = file.size
   material.fileUrl = URL.createObjectURL(file)
-  material.precheckStatus = 'passed'
-  material.issues = []
-  ElMessage.success(`${material.name} 已选择，基础格式校验通过`)
+  material.file = file
+  material.precheckStatus = result.passed ? 'passed' : 'failed'
+  material.precheckRemark = result.remark
+  material.issues = result.issues
+  material.suggestions = result.suggestions
+
+  if (result.passed) {
+    ElMessage.success(`${material.name} 预审通过`)
+  } else {
+    ElMessage.warning(`${material.name} 预审未通过，请根据提示修改`)
+  }
+}
+
+async function runPrecheck(file: File, material: MaterialItem) {
+  const issues: string[] = []
+  const suggestions: string[] = []
+  const extension = getFileExtension(file.name)
+  const allowedExtensions = material.allowedExtensions.map(ext => ext.toLowerCase())
+  const maxBytes = material.maxSizeMb * 1024 * 1024
+  const lowerName = material.name.toLowerCase()
+
+  if (!allowedExtensions.includes(extension)) {
+    issues.push(`文件格式不符合要求，当前为 .${extension || '未知'}，要求 ${allowedExtensions.map(ext => `.${ext}`).join(' / ')}`)
+    suggestions.push('请按材料模板要求转换为规定格式后重新上传')
+  }
+
+  if (file.size === 0) {
+    issues.push('文件为空，无法用于审核')
+    suggestions.push('请重新导出或重新扫描后上传')
+  } else if (file.size < 10 * 1024) {
+    issues.push('文件过小，可能为空白文件、损坏文件或页数不完整')
+    suggestions.push('请确认文件内容完整后重新上传')
+  }
+
+  if (file.size > maxBytes) {
+    issues.push(`文件超过 ${material.maxSizeMb}MB 限制`)
+    suggestions.push('请压缩文件或降低图片分辨率后重新上传')
+  }
+
+  if (['jpg', 'jpeg', 'png'].includes(extension)) {
+    const imageIssues = await checkImageQuality(file)
+    issues.push(...imageIssues)
+    if (imageIssues.length) {
+      suggestions.push('请使用清晰、无遮挡、光线充足的原件照片')
+    }
+  }
+
+  if (extension === 'pdf' && !(await hasPdfHeader(file))) {
+    issues.push('PDF 文件头异常，文件可能损坏或格式伪装')
+    suggestions.push('请重新导出 PDF 后上传')
+  }
+
+  if (extension === 'docx' && !(await hasZipHeader(file))) {
+    issues.push('DOCX 文件结构异常，文件可能损坏')
+    suggestions.push('请使用 Word 重新保存为 DOCX 后上传')
+  }
+
+  if (requiresSignature(material) && !file.name.includes('签') && !file.name.toLowerCase().includes('sign')) {
+    suggestions.push('该材料通常需要签字或盖章，请确认文件内容已签字后再提交')
+  }
+
+  if (/银行卡|银行账户/.test(material.name) && !/\d/.test(file.name)) {
+    suggestions.push('建议文件名包含银行卡或账户关键字，便于工作人员快速识别')
+  }
+
+  if (/合同|证书|营业执照|劳动|学生证|高龄津贴申请表|助餐服务申请表|证明|说明/.test(material.name) && !['doc', 'docx', 'pdf'].includes(extension)) {
+    issues.push('该材料应使用系统模板填写后上传 DOC/DOCX/PDF 文件')
+    suggestions.push('请先点击“下载模板”，填写完成并签字后再上传')
+  }
+
+  if (/证件照|照片/.test(material.name) && !['jpg', 'jpeg', 'png'].includes(extension)) {
+    issues.push('证件照必须上传 JPG 或 PNG 图片')
+    suggestions.push('请按证件照要求重新上传近期免冠照片')
+  }
+
+  if (lowerName.includes('doc') && extension === 'pdf') {
+    suggestions.push('若由 Word 模板转换为 PDF，请确认表格内容完整且签字页清晰')
+  }
+
+  const passed = issues.length === 0
+  return {
+    passed,
+    issues,
+    suggestions: Array.from(new Set(suggestions)),
+    remark: passed
+      ? '格式、大小和基础质量检查通过；OCR 内容核验待后续服务扩展'
+      : issues.join('；')
+  }
+}
+
+async function checkImageQuality(file: File) {
+  const issues: string[] = []
+  const url = URL.createObjectURL(file)
+  try {
+    const image = await loadImage(url)
+    if (image.width < 600 || image.height < 400) {
+      issues.push(`图片分辨率较低，当前 ${image.width}x${image.height}，可能影响人工审核和 OCR 识别`)
+    }
+    if (file.size < 50 * 1024) {
+      issues.push('图片文件过小，可能存在压缩过度或内容模糊')
+    }
+  } catch {
+    issues.push('图片无法正常读取，文件可能损坏')
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+  return issues
+}
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = url
+  })
+}
+
+async function hasPdfHeader(file: File) {
+  const text = await readFileHeader(file, 4)
+  return text === '%PDF'
+}
+
+async function hasZipHeader(file: File) {
+  const text = await readFileHeader(file, 2)
+  return text === 'PK'
+}
+
+async function readFileHeader(file: File, length: number) {
+  const buffer = await file.slice(0, length).arrayBuffer()
+  return String.fromCharCode(...new Uint8Array(buffer))
+}
+
+function getFileExtension(fileName: string) {
+  const parts = fileName.toLowerCase().split('.')
+  return parts.length > 1 ? parts.pop() || '' : ''
+}
+
+function requiresSignature(material: MaterialItem) {
+  return /授权|承诺|申请表|签字|签章/.test(`${material.name}${material.description}`)
 }
 
 function removeFile(index: number) {
   const material = materials.value[index]
   material.uploaded = false
+  material.dirty = true
   material.fileName = ''
   material.fileSize = 0
   material.fileUrl = ''
+  material.file = undefined
   material.precheckStatus = null
+  material.precheckRemark = ''
   material.issues = []
+  material.suggestions = []
   ElMessage.info(`${material.name} 已删除`)
 }
 
@@ -387,16 +688,151 @@ function reUpload(index: number) {
   triggerUpload(index)
 }
 
-function previewFile(index: number) {
+async function previewFile(index: number) {
   const material = materials.value[index]
   if (material.fileUrl) {
+    if (material.fileUrl.startsWith('/api/')) {
+      const blob = await fetchMaterialBlob(material)
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      return
+    }
     window.open(material.fileUrl, '_blank')
   }
 }
 
+async function downloadFile(index: number) {
+  const material = materials.value[index]
+  if (!material.fileUrl) return
+
+  if (material.fileUrl.startsWith('/api/')) {
+    const blob = await fetchMaterialBlob(material)
+    if (!blob) return
+    saveBlob(blob, material.fileName || `${material.name}.${material.allowedExtensions[0] || 'dat'}`)
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = material.fileUrl
+  link.download = material.fileName || `${material.name}.${material.allowedExtensions[0] || 'dat'}`
+  link.click()
+}
+
+async function fetchMaterialBlob(material: MaterialItem) {
+  const token = localStorage.getItem('token')
+  const response = await fetch(material.fileUrl, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  })
+  if (!response.ok) {
+    ElMessage.error('材料文件读取失败')
+    return null
+  }
+  const blob = await response.blob()
+  const contentType = response.headers.get('content-type') || inferMimeType(material.fileName)
+  return blob.type === contentType ? blob : new Blob([blob], { type: contentType })
+}
+
+function saveBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function inferMimeType(fileName: string) {
+  const extension = fileName.split('.').pop()?.toLowerCase()
+  const mimeTypes: Record<string, string> = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  }
+  return mimeTypes[extension || ''] || 'application/octet-stream'
+}
+
+function previewTemplate(material: MaterialItem) {
+  if (material.noTemplateRequired) {
+    ElMessage.info('该材料为官方证件原件或照片上传，无需下载模板')
+    return
+  }
+  if (material.templateUrl) {
+    window.open(material.templateUrl, '_blank')
+    return
+  }
+
+  const html = material.templateHtml || buildTemplateHtml(material)
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+
+function downloadTemplate(material: MaterialItem) {
+  if (material.noTemplateRequired) {
+    ElMessage.info('该材料为官方证件原件或照片上传，无需下载模板')
+    return
+  }
+  if (material.templateUrl) {
+    const link = document.createElement('a')
+    link.href = material.templateUrl
+    link.download = material.templateName || `${material.name}模板`
+    link.click()
+    return
+  }
+
+  const html = material.templateHtml || buildTemplateHtml(material)
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(new Blob([html], { type: 'application/msword;charset=utf-8' }))
+  link.download = material.templateName || `${material.name}模板.doc`
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
+function buildTemplateHtml(material: MaterialItem) {
+  return `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${material.name}模板</title>
+  <style>
+    body { font-family: "Microsoft YaHei", Arial, sans-serif; line-height: 1.8; padding: 32px; color: #1f2937; }
+    h1 { font-size: 24px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 16px; }
+    td, th { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+    .muted { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <h1>${material.name}模板</h1>
+  <p class="muted">该模板由系统根据事项材料配置自动生成，用于演示在线查看与下载能力。</p>
+  <table>
+    <tr><th>材料名称</th><td>${material.name}</td></tr>
+    <tr><th>是否必需</th><td>${material.required ? '是' : '否'}</td></tr>
+    <tr><th>用途说明</th><td>${material.description || material.hint}</td></tr>
+    <tr><th>格式要求</th><td>${material.allowedExtensions.map(ext => `.${ext}`).join(' / ')}</td></tr>
+    <tr><th>大小限制</th><td>${material.maxSizeMb}MB以内</td></tr>
+  </table>
+  <h2>填写说明</h2>
+  <ol>
+    <li>请按真实、完整、清晰的原则准备材料。</li>
+    <li>身份证、居住证明等材料需保证文字和证件号码可辨认。</li>
+    <li>授权书、承诺书、申请表等材料如需签字，请完成签字后再上传。</li>
+    <li>上传后系统会自动进行格式、大小和基础质量预审。</li>
+  </ol>
+</body>
+</html>`
+}
+
 async function submitMaterials() {
   if (!allUploaded.value) {
-    ElMessage.warning('请先上传所有必需材料')
+    const missing = requiredMaterials.value.filter(m => !m.uploaded).map(m => m.name).join('、')
+    ElMessage.warning(`请先上传所有必需材料：${missing}`)
     return
   }
   
@@ -407,29 +843,55 @@ async function submitMaterials() {
   
   submitting.value = true
   try {
-    const applicationId = await submitApplication({
-      itemId: Number(serviceId.value),
-      formData: formData.value,
-      remark: `${serviceName.value || '事项'}申请`
-    })
+    const applicationId = isSupplementMode.value
+      ? Number(supplementApplicationId.value)
+      : await submitApplication({
+          itemId: Number(serviceId.value),
+          formData: formData.value,
+          remark: `${serviceName.value || '事项'}申请`
+        })
 
     for (const material of materials.value) {
-      const materialId = await uploadApplicationMaterial(applicationId, {
-        templateId: null,
+      if (!material.uploaded) {
+        continue
+      }
+      if (isSupplementMode.value && !material.dirty) {
+        continue
+      }
+      if (!material.file) {
+        continue
+      }
+      const materialId = await uploadApplicationMaterialFile(applicationId, {
+        templateId: material.templateId ?? null,
         materialName: material.name,
-        fileName: material.fileName,
-        filePath: material.fileUrl || material.fileName,
-        fileSize: material.fileSize,
-        fileType: material.fileName.split('.').pop() || ''
+        file: material.file
       })
       await precheckApplicationMaterial(materialId, {
-        precheckStatus: material.precheckStatus === 'passed' ? 'passed' : 'pending',
-        precheckRemark: material.precheckStatus === 'passed' ? '前端预检通过' : '待工作人员复核'
+        precheckStatus: material.precheckStatus === 'passed' ? 'passed' : 'failed',
+        precheckRemark: material.precheckRemark || (material.precheckStatus === 'passed' ? '规则预审通过' : '规则预审未通过')
+      })
+    }
+
+    const completeness = await checkApplicationMaterialCompleteness(applicationId)
+    if (!completeness.complete) {
+      ElMessage.warning(`材料不完整，缺少：${completeness.missingMaterialNames.join('、')}`)
+      return
+    }
+
+    if (isSupplementMode.value) {
+      await resubmitApplication(applicationId, {
+        itemId: Number(serviceId.value),
+        formData: formData.value,
+        remark: existingApplicationMode.value === 'resubmit'
+          ? `${serviceName.value || '事项'}重新提交`
+          : `${serviceName.value || '事项'}补件已提交`
       })
     }
 
     sessionStorage.removeItem('tempApplication')
-    ElMessage.success('申请和材料已提交')
+    ElMessage.success(isSupplementMode.value
+      ? (existingApplicationMode.value === 'resubmit' ? '申请已重新提交' : '补件材料已重新提交')
+      : '申请和材料已提交')
     router.push('/application/list')
   } finally {
     submitting.value = false
@@ -441,29 +903,329 @@ function goBack() {
 }
 
 function loadTempData() {
+  const applicationId = Number(route.query.applicationId)
+  const mode = String(route.query.mode || '')
+  if ((mode === 'supplement' || mode === 'resubmit') && applicationId) {
+    existingApplicationMode.value = mode
+    loadExistingApplicationData(applicationId)
+    return
+  }
+
   const tempData = sessionStorage.getItem('tempApplication')
   if (tempData) {
     const data = JSON.parse(tempData)
     serviceId.value = data.serviceId
     serviceName.value = data.serviceName
+    serviceCategory.value = data.serviceCategory || ''
     formData.value = data.formData
     if (Array.isArray(data.serviceMaterials) && data.serviceMaterials.length > 0) {
-      materials.value = data.serviceMaterials.map((name: string, index: number) => ({
-        id: `material-${index}`,
-        name,
-        hint: '请上传清晰完整的材料文件',
-        uploaded: false,
-        uploading: false,
-        fileName: '',
-        fileSize: 0,
-        fileUrl: '',
-        precheckStatus: null,
-        issues: []
-      }))
+      materials.value = data.serviceMaterials.map((material: any, index: number) =>
+        createMaterialItem(material, index)
+      )
     }
   } else {
     ElMessage.warning('请先填写申请信息')
     router.back()
+  }
+}
+
+async function loadExistingApplicationData(applicationId: number) {
+  isSupplementMode.value = true
+  supplementApplicationId.value = applicationId
+  const detail = await getApplicationDetail(applicationId)
+
+  serviceId.value = String(detail.itemId)
+  serviceName.value = detail.itemName
+  serviceCategory.value = detail.category || ''
+  formData.value = parseFormData(detail.formData)
+
+  const uploadedByTemplate = new Map(
+    (detail.materials || [])
+      .filter((material: any) => material.templateId)
+      .map((material: any) => [material.templateId, material])
+  )
+  const uploadedByName = new Map(
+    (detail.materials || [])
+      .filter((material: any) => material.materialName)
+      .map((material: any) => [material.materialName, material])
+  )
+  const requiredMaterials = String(detail.itemName || serviceName.value || '').includes('居住证办理')
+    ? getResidencePermitMaterialsByProof(formData.value.proofType)
+    : String(detail.itemName || serviceName.value || '').includes('便民证明')
+      ? getConvenienceMaterialsByProof(formData.value.proofType, formData.value.scenario)
+    : mergeMaterials(
+        detail.requiredMaterials || [],
+        getFallbackMaterialsByService(detail.itemName || serviceName.value)
+      )
+
+  materials.value = requiredMaterials.map((template: any, index: number) => {
+    const uploaded = (template.templateId
+      ? uploadedByTemplate.get(template.templateId)
+      : uploadedByName.get(template.materialName)) as any
+    const usable = uploaded && uploaded.precheckStatus !== 'failed'
+    const base = createMaterialItem(template, index)
+    return {
+      ...base,
+      materialId: uploaded?.materialId,
+      uploaded: Boolean(usable),
+      uploading: false,
+      dirty: false,
+      fileName: usable ? uploaded.fileName : '',
+      fileSize: usable ? Number(uploaded.fileSize || 0) : 0,
+      fileUrl: usable ? uploaded.fileUrl || getApplicationMaterialFileUrl(uploaded.materialId) : '',
+      precheckStatus: usable ? uploaded.precheckStatus || 'passed' : null,
+      precheckRemark: usable ? uploaded.precheckRemark || '' : '',
+      issues: uploaded?.precheckStatus === 'failed'
+        ? [uploaded.precheckRemark || '材料预审未通过，请重新上传']
+        : [],
+      suggestions: uploaded?.precheckStatus === 'failed'
+        ? ['请根据工作人员意见重新上传清晰完整的材料']
+        : []
+    }
+  })
+}
+
+function getFallbackMaterialsByService(itemName: string) {
+  const name = String(itemName || '')
+  if (name.includes('居住证办理')) {
+    return getResidencePermitMaterialsByProof()
+  }
+  if (name.includes('老年补贴')) {
+    return [
+      materialTemplate('身份证', 'id_card', '申请人身份证明材料。', true),
+      materialTemplate('户口簿', 'household_register', '申请人户籍信息材料。', true),
+      materialTemplate('高龄津贴申请表', 'senior_allowance_application', '请下载模板填写申请人、紧急联系人和补贴发放账户信息并签字。', true),
+      materialTemplate('近期免冠两寸照片', 'recent_two_inch_photo', '近期6个月内免冠彩色两寸照，白色或淡蓝色背景。', true),
+      materialTemplate('社保卡（银行卡）', 'social_security_card', '用于补贴发放账户核验。', true)
+    ]
+  }
+  if (name.includes('居住证明')) {
+    return [
+      materialTemplate('居民身份证（或户口簿）', 'identity_or_household_register', '用于核验申请人身份和户籍信息。', true),
+      materialTemplate('居住情况证明', 'residence_situation_proof', '可上传房产证、租房合同、单位宿舍证明等。', true),
+      materialTemplate('亲属关系证明', 'family_relationship_proof', '居住在近亲属家中时提交。', false)
+    ]
+  }
+  if (name.includes('便民证明')) {
+    return getConvenienceMaterialsByProof()
+  }
+  if (name.includes('助餐') || name.includes('服务预约')) {
+    return [
+      materialTemplate('身份证', 'id_card', '申请人身份证明材料。', true),
+      materialTemplate('社保卡', 'social_security_card', '用于核验身份及服务资格。', true),
+      materialTemplate('助餐服务申请表', 'meal_service_application', '请下载模板填写助餐服务需求、用餐频次和紧急联系人。', true),
+      materialTemplate('户口簿', 'household_register', '非本地首次申请时提交。', false),
+      materialTemplate('居住证', 'residence_permit_card', '非本地老年居民申请时提交。', false)
+    ]
+  }
+  return []
+}
+
+function getConvenienceMaterialsByProof(proofType = 'no_criminal', scenario = '') {
+  const common = [
+    materialTemplate('居民身份证', 'id_card', '申请人当前有效身份证或电子身份证。', true),
+    materialTemplate('户口簿', 'household_register', '首页和本人页，用于核验户籍及家庭关系。', true)
+  ]
+  const configs: Record<string, any> = {
+    no_criminal: {
+      base: [
+        ...common,
+        materialTemplate('申请事由证明', 'application_reason_proof', '如单位介绍信、录取通知书、签证要求说明或资格审查说明。', true),
+        materialTemplate('无犯罪记录证明申请表', 'no_criminal_record_application', '现场填写或下载模板填写后上传。', true),
+        materialTemplate('居住证', 'residence_permit_card', '非本地户籍人员部分城市需提供。', false),
+        materialTemplate('委托书', 'proxy_authorization', '委托他人代办时提交，并补充双方身份证。', false)
+      ]
+    },
+    low_income: {
+      base: [
+        ...common,
+        materialTemplate('收入说明', 'income_statement', '包括工资、养老金、子女赡养费等家庭收入。', true),
+        materialTemplate('家庭情况说明', 'family_situation_statement', '说明因病、因残、因灾等致困原因。', true),
+        materialTemplate('低收入家庭申请表', 'low_income_family_application', '社区或街道统一制式申请表。', true)
+      ],
+      scenario: {
+        illness: [materialTemplate('病历/诊断证明', 'medical_diagnosis', '医院出具的病历、诊断书、出院小结等。', true)],
+        disability: [materialTemplate('残疾证', 'disability_certificate', '残联颁发的残疾证。', true)],
+        unemployment: [materialTemplate('失业证明', 'unemployment_certificate', '就业创业证或单位解除劳动关系证明。', true)],
+        student_support: [materialTemplate('在校学生证明', 'student_study_proof', '学校出具的在读证明或学生证。', true)]
+      },
+      optional: [
+        materialTemplate('婚姻状况证明', 'marital_status_proof', '单亲家庭可补充离婚证、配偶死亡证明等。', false),
+        materialTemplate('房产证明', 'housing_asset_proof', '部分地区用于核验住房困难情况。', false),
+        materialTemplate('车辆登记证明', 'vehicle_registration_proof', '部分地区用于核对家庭资产。', false)
+      ]
+    },
+    marital_status: {
+      base: [
+        ...common,
+        materialTemplate('婚姻登记档案证明', 'marriage_archive_proof', '向原登记机关申请调取。', true)
+      ],
+      scenario: {
+        marriage_certificate_lost: [materialTemplate('婚姻状况说明承诺书', 'marital_status_commitment', '无法提供完整档案时补充说明并签字承诺。', false)],
+        divorce_certificate_lost: [
+          materialTemplate('法院判决书/调解书', 'court_judgment_or_mediation', '判决离婚情形需提供法院出具材料。', false),
+          materialTemplate('结婚证/离婚证', 'marriage_or_divorce_certificate', '如有剩余证件，需提供。', false)
+        ],
+        widowed: [materialTemplate('配偶死亡证明', 'spouse_death_certificate', '医院死亡证明或派出所注销户口证明。', true)],
+        household_migration: [materialTemplate('结婚证/离婚证', 'marriage_or_divorce_certificate', '用于户口迁移或婚姻状况变更。', true)]
+      },
+      optional: [
+        materialTemplate('单位/社区证明', 'unit_or_community_marriage_proof', '无法获取档案时由单位人事部门或社区出具说明。', false),
+        materialTemplate('委托书', 'proxy_authorization', '委托他人代办时提交，并补充双方身份证。', false)
+      ]
+    },
+    same_person: {
+      base: [
+        ...common,
+        materialTemplate('同一人身份声明书', 'same_person_identity_statement', '本人签字承诺两个身份信息为同一人。', true)
+      ],
+      scenario: {
+        id_15_to_18: [materialTemplate('原身份证件', 'old_identity_document', '旧身份证复印件或原身份证号证件。', false)],
+        name_changed: [materialTemplate('户口簿曾用名页', 'household_previous_name_page', '户口簿中记载曾用名的页面。', true)],
+        archive_error: [materialTemplate('单位/学校证明', 'unit_or_school_proof', '人事档案记录不一致时由单位或学校出具说明。', true)],
+        household_migration_change: [materialTemplate('户籍变更证明', 'household_change_proof', '派出所出具的户籍变更证明。', true)]
+      },
+      optional: [
+        materialTemplate('佐证材料', 'supporting_identity_evidence', '驾驶证、护照、毕业证等能证明身份的证件。', false)
+      ]
+    }
+  }
+  const config = configs[proofType] || configs.no_criminal
+  return mergeMaterials([
+    ...config.base,
+    ...(config.scenario?.[scenario] || []),
+    ...(config.optional || [])
+  ], [])
+}
+
+function getResidencePermitMaterialsByProof(proofType = 'rental_contract') {
+  const base = [
+    materialTemplate('居民身份证', 'id_card', '原件及复印件，用于核验申请人身份。', true),
+    materialTemplate('本人相片', 'personal_photo', '近期免冠彩色一寸照，部分地区可从人口系统提取。', true)
+  ]
+  const proofMap: Record<string, any> = {
+    rental_contract: materialTemplate('房屋租赁合同', 'rental_contract', '租赁住房申请时提交房屋租赁合同关键页。', true),
+    real_estate_certificate: materialTemplate('房屋产权证明文件', 'real_estate_certificate', '自有房屋申请时提交房屋产权证明文件或不动产权证书关键信息页。', true),
+    purchase_contract: materialTemplate('购房合同', 'purchase_contract', '购房但暂未取得产权证时提交购房合同关键信息页。', true),
+    unit_accommodation_proof: materialTemplate('用人单位/就读学校出具的住宿证明', 'unit_accommodation_proof', '居住在单位或学校宿舍时提交加盖公章的住宿证明。', true),
+    business_license: materialTemplate('工商营业执照', 'business_license', '个体工商户或企业主申请时提交营业执照副本信息。', true),
+    labor_contract: materialTemplate('劳动合同', 'labor_contract', '受雇就业申请时提交劳动合同关键页。', true),
+    labor_relation_proof: materialTemplate('用人单位出具的劳动关系证明', 'labor_relation_proof', '不便提供完整劳动合同时，由用人单位出具劳动关系证明。', true),
+    student_card: materialTemplate('学生证', 'student_card', '提交学生证关键信息页和有效注册记录。', true),
+    continuous_study_proof: materialTemplate('就读学校出具的连续就读证明', 'continuous_study_proof', '由学校教务处或相关部门盖章出具。', true)
+  }
+  return [...base, proofMap[proofType] || proofMap.rental_contract]
+}
+
+function materialTemplate(materialName: string, materialType: string, description: string, isRequired: boolean) {
+  return {
+    templateId: null,
+    materialName,
+    materialType,
+    description,
+    sampleUrl: '',
+    isRequired: isRequired ? 1 : 0,
+    sortOrder: 0
+  }
+}
+
+function mergeMaterials(primaryMaterials: any[], fallbackMaterials: any[]) {
+  const rows = [...(primaryMaterials || []), ...(fallbackMaterials || [])]
+  const map = new Map<string, any>()
+  for (const row of rows) {
+    const key = row.materialType || row.materialName
+    if (!map.has(key)) {
+      map.set(key, row)
+    }
+  }
+  return Array.from(map.values())
+}
+
+function createMaterialItem(material: any, index: number): MaterialItem {
+  const isObject = typeof material === 'object' && material !== null
+  const name = isObject ? material.materialName || material.name : String(material)
+  const materialType = isObject ? material.materialType || '' : ''
+  const description = isObject ? material.description || '' : ''
+  const builtInTemplate = resolveBuiltInMaterialTemplate(name, materialType, description)
+  const noTemplateRequired = !builtInTemplate && isIdentityDocumentMaterial(name, materialType)
+  const allowedExtensions = inferAllowedExtensions(name, materialType, description, Boolean(builtInTemplate), noTemplateRequired)
+  const templateKey = isObject ? material.templateId ?? 'no-template' : 'text'
+  const typeKey = materialType || name || 'material'
+  return {
+    id: `material-${index}-${templateKey}-${typeKey}`,
+    templateId: isObject ? material.templateId ?? null : null,
+    name,
+    hint: description || '请上传清晰完整的材料文件',
+    description,
+    required: isObject ? Number(material.isRequired ?? 1) === 1 : true,
+    allowedExtensions,
+    maxSizeMb: defaultMaxSizeMb,
+    templateUrl: isObject ? material.sampleUrl || '' : '',
+    templateName: builtInTemplate?.fileName || '',
+    templateHtml: builtInTemplate ? wrapMaterialTemplateHtml(builtInTemplate) : '',
+    noTemplateRequired,
+    uploaded: false,
+    uploading: false,
+    dirty: false,
+    fileName: '',
+    fileSize: 0,
+    fileUrl: '',
+    precheckStatus: null,
+    precheckRemark: '',
+    issues: [],
+    suggestions: []
+  }
+}
+
+function inferAllowedExtensions(
+  name: string,
+  materialType?: string,
+  description?: string,
+  hasTemplate = false,
+  noTemplateRequired = false
+) {
+  const source = `${name} ${materialType || ''} ${description || ''}`.toLowerCase()
+  if (hasTemplate) {
+    return ['doc', 'docx', 'pdf']
+  }
+  if (noTemplateRequired) {
+    return ['pdf', 'jpg', 'jpeg', 'png']
+  }
+  if (/docx|word|申请表|授权书|承诺书|表格|doc/.test(source)) {
+    return ['doc', 'docx', 'pdf']
+  }
+  if (/照片|相片|图片|photo|image|jpg|png/.test(source)) {
+    return ['jpg', 'jpeg', 'png']
+  }
+  if (/pdf/.test(source)) {
+    return ['pdf']
+  }
+  return ['pdf', 'jpg', 'jpeg', 'png']
+}
+
+function parseFormData(value?: string) {
+  if (!value) return emptyFormData()
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value
+    return {
+      name: parsed.name || '',
+      idCard: parsed.idCard || '',
+      phone: parsed.phone || '',
+      address: parsed.address || '',
+      residenceStartDate: parsed.residenceStartDate || '',
+      employerName: parsed.employerName || '',
+      workAddress: parsed.workAddress || '',
+      schoolName: parsed.schoolName || '',
+      enrollmentDate: parsed.enrollmentDate || '',
+      applicationCondition: parsed.applicationCondition || '',
+      applicationConditionLabel: parsed.applicationConditionLabel || '',
+      proofType: parsed.proofType || '',
+      proofLabel: parsed.proofLabel || '',
+      scenario: parsed.scenario || '',
+      scenarioLabel: parsed.scenarioLabel || ''
+    }
+  } catch {
+    return emptyFormData()
   }
 }
 
@@ -492,6 +1254,33 @@ onMounted(() => {
 .page-header p {
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.service-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.service-summary-card strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.summary-label {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
 }
 
 .steps-wrapper {
@@ -620,13 +1409,39 @@ onMounted(() => {
   color: var(--text-primary);
 }
 
+.material-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .material-format {
   font-size: 0.6875rem;
   color: var(--text-muted);
 }
 
+.material-rule {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  margin-top: 0.125rem;
+}
+
 .material-body {
   padding: 1rem;
+}
+
+.template-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.template-note {
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .upload-area {
@@ -715,6 +1530,21 @@ onMounted(() => {
 
 .precheck-result li {
   margin: 0.25rem 0;
+}
+
+.suggestion-box {
+  margin: 0.625rem 0;
+  padding: 0.625rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.suggestion-box strong {
+  color: var(--text-primary);
+  margin-right: 0.25rem;
 }
 
 .precheck-pass {

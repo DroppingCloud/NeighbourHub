@@ -3,9 +3,11 @@ package com.community.platform.vo.application;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 申请单 VO
+ * Application view object.
  */
 @Data
 public class ApplicationVO {
@@ -29,4 +31,22 @@ public class ApplicationVO {
     private String remark;
 
     private Boolean isProxy;
+
+    private Long orderId;
+
+    private String workOrderStatus;
+
+    private String workOrderStatusLabel;
+
+    private String auditOpinion;
+
+    private String staffName;
+
+    private String formData;
+
+    private List<Map<String, Object>> materials;
+
+    private List<Map<String, Object>> requiredMaterials;
+
+    private MaterialCompletenessVO materialCompleteness;
 }

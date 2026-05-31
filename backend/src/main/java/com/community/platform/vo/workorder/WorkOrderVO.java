@@ -1,11 +1,12 @@
 package com.community.platform.vo.workorder;
 
+import com.community.platform.vo.application.MaterialCompletenessVO;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 /**
- * 工单 VO
+ * Work order view object.
  */
 @Data
 public class WorkOrderVO {
@@ -25,6 +26,8 @@ public class WorkOrderVO {
     private String auditOpinion;
 
     private String staffName;
+
+    private MaterialCompletenessVO materialCompleteness;
 
     private LocalDateTime createTime;
 
