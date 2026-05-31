@@ -9,6 +9,12 @@
       <div>
         <span class="summary-label">当前办理事项</span>
         <strong>{{ serviceName || '事项办理' }}</strong>
+        <div v-if="contextTags.length" class="summary-context">
+          <span v-for="tag in contextTags" :key="tag.label" class="context-chip">
+            <span>{{ tag.label }}</span>
+            <strong>{{ tag.value }}</strong>
+          </span>
+        </div>
       </div>
       <el-tag effect="plain">{{ serviceCategory || '事项' }}</el-tag>
     </div>
@@ -66,8 +72,14 @@
               <div class="material-detail">
                 <div class="material-title-row">
                   <span class="material-name">{{ material.name }}</span>
-                  <el-tag v-if="material.required" size="small" type="danger" effect="plain">必需</el-tag>
+                  <el-tag v-if="material.alternativeGroup" size="small" type="warning" effect="plain">
+                    {{ material.preferred ? '推荐上传' : '可替代' }}
+                  </el-tag>
+                  <el-tag v-else-if="material.required" size="small" type="danger" effect="plain">必需</el-tag>
                   <el-tag v-else size="small" effect="plain">可选</el-tag>
+                </div>
+                <div v-if="material.alternativeGroupLabel" class="material-group-rule">
+                  {{ material.alternativeGroupLabel }}任选一项上传即可。
                 </div>
                 <div class="material-format">
                   {{ material.description || material.hint }}
@@ -108,9 +120,20 @@
               <span v-else-if="material.templateName" class="template-note">{{ material.templateName }}</span>
             </div>
 
-            <div v-if="!material.uploaded" class="upload-area" @click="triggerUpload(index)">
+            <div
+              v-if="!material.uploaded"
+              class="upload-area"
+              :class="{ dragging: draggingMaterialIndex === index, uploading: material.uploading }"
+              @click="triggerUpload(index)"
+              @dragenter.prevent="handleDragEnter(index)"
+              @dragover.prevent="handleDragOver(index)"
+              @dragleave.prevent="handleDragLeave(index)"
+              @drop.prevent.stop="handleFileDrop($event, index)"
+            >
               <el-icon :size="32"><UploadFilled /></el-icon>
-              <span>{{ isSupplementMode ? '点击上传修改后的材料' : '点击或拖拽上传' }}</span>
+              <span v-if="material.uploading">正在预审材料...</span>
+              <span v-else-if="draggingMaterialIndex === index">松开鼠标上传到此材料</span>
+              <span v-else>{{ isSupplementMode ? '点击或拖拽上传修改后的材料' : '点击或拖拽上传' }}</span>
               <span class="upload-hint">{{ material.hint }}</span>
             </div>
             
@@ -238,6 +261,9 @@ interface MaterialItem {
   hint: string
   description: string
   required: boolean
+  alternativeGroup: string
+  alternativeGroupLabel: string
+  preferred: boolean
   allowedExtensions: string[]
   maxSizeMb: number
   templateUrl?: string
@@ -258,6 +284,7 @@ interface MaterialItem {
 }
 
 const currentMaterialIndex = ref(-1)
+const draggingMaterialIndex = ref<number | null>(null)
 const fileInputRef = ref<HTMLInputElement>()
 const submitting = ref(false)
 const isSupplementMode = ref(false)
@@ -272,12 +299,15 @@ const formData = ref({
   phone: '',
   address: '',
   residenceStartDate: '',
+  residenceEndDate: '',
   employerName: '',
   workAddress: '',
   schoolName: '',
   enrollmentDate: '',
   applicationCondition: '',
   applicationConditionLabel: '',
+  housingType: '',
+  housingLabel: '',
   proofType: '',
   proofLabel: '',
   scenario: '',
@@ -295,12 +325,15 @@ function emptyFormData() {
     phone: '',
     address: '',
     residenceStartDate: '',
+    residenceEndDate: '',
     employerName: '',
     workAddress: '',
     schoolName: '',
     enrollmentDate: '',
     applicationCondition: '',
     applicationConditionLabel: '',
+    housingType: '',
+    housingLabel: '',
     proofType: '',
     proofLabel: '',
     scenario: '',
@@ -316,6 +349,9 @@ const materials = ref<MaterialItem[]>([
     hint: '需上传正反面清晰照片',
     description: '用于核验申请人身份信息',
     required: true,
+    alternativeGroup: '',
+    alternativeGroupLabel: '',
+    preferred: false,
     allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     maxSizeMb: defaultMaxSizeMb,
     templateName: '',
@@ -338,6 +374,9 @@ const materials = ref<MaterialItem[]>([
     hint: '需上传户主页和本人页',
     description: '用于核验户籍信息',
     required: true,
+    alternativeGroup: '',
+    alternativeGroupLabel: '',
+    preferred: false,
     allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     maxSizeMb: defaultMaxSizeMb,
     templateName: '',
@@ -360,6 +399,9 @@ const materials = ref<MaterialItem[]>([
     hint: '租房合同或房产证',
     description: '用于核验当前居住地址',
     required: true,
+    alternativeGroup: '',
+    alternativeGroupLabel: '',
+    preferred: false,
     allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
     maxSizeMb: defaultMaxSizeMb,
     templateName: '',
@@ -382,6 +424,9 @@ const materials = ref<MaterialItem[]>([
     hint: '白底或蓝底，2寸',
     description: '用于办事材料归档或证件照采集',
     required: false,
+    alternativeGroup: '',
+    alternativeGroupLabel: '',
+    preferred: false,
     allowedExtensions: ['jpg', 'jpeg', 'png'],
     maxSizeMb: defaultMaxSizeMb,
     templateName: '证件照要求说明.doc',
@@ -401,7 +446,27 @@ const materials = ref<MaterialItem[]>([
 ])
 
 const requiredMaterials = computed(() => materials.value.filter(m => m.required))
-const allUploaded = computed(() => requiredMaterials.value.every(m => m.uploaded))
+const alternativeMaterialGroups = computed(() => {
+  const groups = new Map<string, { label: string; rows: MaterialItem[] }>()
+  for (const material of materials.value) {
+    if (!material.alternativeGroup) continue
+    if (!groups.has(material.alternativeGroup)) {
+      groups.set(material.alternativeGroup, {
+        label: material.alternativeGroupLabel || '可替代材料',
+        rows: []
+      })
+    }
+    groups.get(material.alternativeGroup)!.rows.push(material)
+  }
+  return Array.from(groups.values())
+})
+const missingRequiredNames = computed(() => [
+  ...requiredMaterials.value.filter(m => !m.uploaded).map(m => m.name),
+  ...alternativeMaterialGroups.value
+    .filter(group => !group.rows.some(row => row.uploaded))
+    .map(group => `${group.label}（任选一项）`)
+])
+const allUploaded = computed(() => missingRequiredNames.value.length === 0)
 const hasFailedPrecheck = computed(() => materials.value.some(m => m.precheckStatus === 'failed'))
 const showOverallResult = computed(() => materials.value.some(m => m.uploaded))
 const currentAccept = computed(() => {
@@ -431,7 +496,7 @@ const overallResult = computed(() => {
   const passedCount = requiredMaterials.value.filter(m => m.precheckStatus === 'passed').length
   const failedCount = materials.value.filter(m => m.precheckStatus === 'failed').length
   const checkingCount = materials.value.filter(m => m.precheckStatus === 'checking').length
-  const missingItems = requiredMaterials.value.filter(m => !m.uploaded).map(m => m.name)
+  const missingItems = missingRequiredNames.value
   
   if (checkingCount > 0) {
     return {
@@ -475,9 +540,35 @@ const overallResult = computed(() => {
   return {
     passed: false,
     title: '材料待补充',
-    desc: `已上传 ${uploadedCount}/${requiredMaterials.value.length} 项必需材料`,
+    desc: `已上传 ${uploadedCount}/${requiredMaterials.value.length} 项固定必需材料`,
     failedItems: []
   }
+})
+
+const contextTags = computed(() => {
+  const tags: Array<{ label: string; value: string }> = []
+  if (formData.value.applicationConditionLabel) {
+    tags.push({ label: '申请条件', value: formData.value.applicationConditionLabel })
+  }
+  if (formData.value.housingLabel) {
+    tags.push({ label: '住房情况', value: formData.value.housingLabel })
+  }
+  if (formData.value.proofLabel) {
+    tags.push({
+      label: serviceName.value.includes('便民证明') ? '证明类型' : '证明材料',
+      value: formData.value.proofLabel
+    })
+  }
+  if (formData.value.scenarioLabel) {
+    tags.push({ label: '具体情形', value: formData.value.scenarioLabel })
+  }
+  if (formData.value.residenceStartDate || formData.value.residenceEndDate) {
+    tags.push({
+      label: '居住时间',
+      value: `${formData.value.residenceStartDate || '未填'} 至 ${formData.value.residenceEndDate || '未填'}`
+    })
+  }
+  return tags
 })
 
 function formatIdCard(idCard: string): string {
@@ -494,6 +585,7 @@ function formatFileSize(bytes: number): string {
 }
 
 function triggerUpload(index: number) {
+  if (materials.value[index]?.uploading) return
   currentMaterialIndex.value = index
   fileInputRef.value?.click()
 }
@@ -502,8 +594,36 @@ async function handleFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file || currentMaterialIndex.value === -1) return
-  
-  const material = materials.value[currentMaterialIndex.value]
+  await processSelectedFile(file, currentMaterialIndex.value)
+  input.value = ''
+}
+
+function handleDragEnter(index: number) {
+  if (materials.value[index]?.uploading) return
+  draggingMaterialIndex.value = index
+}
+
+function handleDragOver(index: number) {
+  if (materials.value[index]?.uploading) return
+  draggingMaterialIndex.value = index
+}
+
+function handleDragLeave(index: number) {
+  if (draggingMaterialIndex.value === index) {
+    draggingMaterialIndex.value = null
+  }
+}
+
+async function handleFileDrop(event: DragEvent, index: number) {
+  draggingMaterialIndex.value = null
+  const file = event.dataTransfer?.files?.[0]
+  if (!file) return
+  await processSelectedFile(file, index)
+}
+
+async function processSelectedFile(file: File, index: number) {
+  const material = materials.value[index]
+  if (!material) return
   if (material.uploading) return
 
   material.uploading = true
@@ -515,7 +635,6 @@ async function handleFileSelect(event: Event) {
     await handleLocalFilePrecheck(file, material)
   } finally {
     material.uploading = false
-    input.value = ''
   }
 }
 
@@ -591,7 +710,7 @@ async function runPrecheck(file: File, material: MaterialItem) {
     suggestions.push('建议文件名包含银行卡或账户关键字，便于工作人员快速识别')
   }
 
-  if (/合同|证书|营业执照|劳动|学生证|高龄津贴申请表|助餐服务申请表|证明|说明/.test(material.name) && !['doc', 'docx', 'pdf'].includes(extension)) {
+  if (/合同|证书|营业执照|劳动|学生证|高龄津贴申请表|证明|说明/.test(material.name) && !['doc', 'docx', 'pdf'].includes(extension)) {
     issues.push('该材料应使用系统模板填写后上传 DOC/DOCX/PDF 文件')
     suggestions.push('请先点击“下载模板”，填写完成并签字后再上传')
   }
@@ -831,7 +950,7 @@ function buildTemplateHtml(material: MaterialItem) {
 
 async function submitMaterials() {
   if (!allUploaded.value) {
-    const missing = requiredMaterials.value.filter(m => !m.uploaded).map(m => m.name).join('、')
+    const missing = missingRequiredNames.value.join('、')
     ElMessage.warning(`请先上传所有必需材料：${missing}`)
     return
   }
@@ -1009,15 +1128,6 @@ function getFallbackMaterialsByService(itemName: string) {
   if (name.includes('便民证明')) {
     return getConvenienceMaterialsByProof()
   }
-  if (name.includes('助餐') || name.includes('服务预约')) {
-    return [
-      materialTemplate('身份证', 'id_card', '申请人身份证明材料。', true),
-      materialTemplate('社保卡', 'social_security_card', '用于核验身份及服务资格。', true),
-      materialTemplate('助餐服务申请表', 'meal_service_application', '请下载模板填写助餐服务需求、用餐频次和紧急联系人。', true),
-      materialTemplate('户口簿', 'household_register', '非本地首次申请时提交。', false),
-      materialTemplate('居住证', 'residence_permit_card', '非本地老年居民申请时提交。', false)
-    ]
-  }
   return []
 }
 
@@ -1107,14 +1217,37 @@ function getResidencePermitMaterialsByProof(proofType = 'rental_contract') {
     rental_contract: materialTemplate('房屋租赁合同', 'rental_contract', '租赁住房申请时提交房屋租赁合同关键页。', true),
     real_estate_certificate: materialTemplate('房屋产权证明文件', 'real_estate_certificate', '自有房屋申请时提交房屋产权证明文件或不动产权证书关键信息页。', true),
     purchase_contract: materialTemplate('购房合同', 'purchase_contract', '购房但暂未取得产权证时提交购房合同关键信息页。', true),
-    unit_accommodation_proof: materialTemplate('用人单位/就读学校出具的住宿证明', 'unit_accommodation_proof', '居住在单位或学校宿舍时提交加盖公章的住宿证明。', true),
+    unit_accommodation_proof: materialTemplate('用人单位出具的住宿证明', 'unit_accommodation_proof', '居住在单位宿舍时提交加盖单位公章的住宿证明。', true),
+    school_accommodation_proof: materialTemplate('就读学校出具的住宿证明', 'school_accommodation_proof', '居住在学校宿舍时提交加盖学校公章的住宿证明。', true),
     business_license: materialTemplate('工商营业执照', 'business_license', '个体工商户或企业主申请时提交营业执照副本信息。', true),
     labor_contract: materialTemplate('劳动合同', 'labor_contract', '受雇就业申请时提交劳动合同关键页。', true),
     labor_relation_proof: materialTemplate('用人单位出具的劳动关系证明', 'labor_relation_proof', '不便提供完整劳动合同时，由用人单位出具劳动关系证明。', true),
     student_card: materialTemplate('学生证', 'student_card', '提交学生证关键信息页和有效注册记录。', true),
     continuous_study_proof: materialTemplate('就读学校出具的连续就读证明', 'continuous_study_proof', '由学校教务处或相关部门盖章出具。', true)
   }
-  return [...base, proofMap[proofType] || proofMap.rental_contract]
+  const groupKeys = (() => {
+    if (['real_estate_certificate', 'purchase_contract'].includes(proofType)) {
+      return ['real_estate_certificate', 'purchase_contract']
+    }
+    if (['business_license', 'labor_contract', 'labor_relation_proof'].includes(proofType)) {
+      return ['business_license', 'labor_contract', 'labor_relation_proof']
+    }
+    if (['student_card', 'continuous_study_proof'].includes(proofType)) {
+      return ['student_card', 'continuous_study_proof']
+    }
+    return [proofType]
+  })()
+  const proofRows = groupKeys
+    .map(key => proofMap[key])
+    .filter(Boolean)
+    .map((row: any) => ({
+      ...row,
+      isRequired: groupKeys.length > 1 ? 0 : row.isRequired,
+      alternativeGroup: groupKeys.length > 1 ? 'residence_permit_proof' : '',
+      alternativeGroupLabel: groupKeys.length > 1 ? '居住证办理证明材料' : '',
+      preferred: row.materialType === proofType
+    }))
+  return [...base, ...proofRows]
 }
 
 function materialTemplate(materialName: string, materialType: string, description: string, isRequired: boolean) {
@@ -1157,7 +1290,10 @@ function createMaterialItem(material: any, index: number): MaterialItem {
     name,
     hint: description || '请上传清晰完整的材料文件',
     description,
-    required: isObject ? Number(material.isRequired ?? 1) === 1 : true,
+    required: isObject && material.alternativeGroup ? false : (isObject ? Number(material.isRequired ?? 1) === 1 : true),
+    alternativeGroup: isObject ? material.alternativeGroup || '' : '',
+    alternativeGroupLabel: isObject ? material.alternativeGroupLabel || '' : '',
+    preferred: isObject ? Boolean(material.preferred) : false,
     allowedExtensions,
     maxSizeMb: defaultMaxSizeMb,
     templateUrl: isObject ? material.sampleUrl || '' : '',
@@ -1213,12 +1349,15 @@ function parseFormData(value?: string) {
       phone: parsed.phone || '',
       address: parsed.address || '',
       residenceStartDate: parsed.residenceStartDate || '',
+      residenceEndDate: parsed.residenceEndDate || '',
       employerName: parsed.employerName || '',
       workAddress: parsed.workAddress || '',
       schoolName: parsed.schoolName || '',
       enrollmentDate: parsed.enrollmentDate || '',
       applicationCondition: parsed.applicationCondition || '',
       applicationConditionLabel: parsed.applicationConditionLabel || '',
+      housingType: parsed.housingType || '',
+      housingLabel: parsed.housingLabel || '',
       proofType: parsed.proofType || '',
       proofLabel: parsed.proofLabel || '',
       scenario: parsed.scenario || '',
@@ -1276,6 +1415,31 @@ onMounted(() => {
   font-size: 1.125rem;
   line-height: 1.5;
   word-break: break-word;
+}
+
+.summary-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.context-chip strong {
+  display: inline;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.78rem;
 }
 
 .summary-label {
@@ -1421,6 +1585,12 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
+.material-group-rule {
+  font-size: 0.6875rem;
+  color: var(--gold);
+  margin-top: 0.125rem;
+}
+
 .material-rule {
   font-size: 0.6875rem;
   color: var(--text-secondary);
@@ -1458,9 +1628,24 @@ onMounted(() => {
   background: var(--bg-tertiary);
 }
 
+.upload-area.dragging {
+  border-color: var(--gold);
+  background: rgba(212, 168, 67, 0.12);
+  box-shadow: inset 0 0 0 0.0625rem rgba(212, 168, 67, 0.35);
+}
+
+.upload-area.uploading {
+  cursor: wait;
+  opacity: 0.82;
+}
+
 .upload-area .el-icon {
   color: var(--text-muted);
   margin-bottom: 0.5rem;
+}
+
+.upload-area.dragging .el-icon {
+  color: var(--gold);
 }
 
 .upload-area span {

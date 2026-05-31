@@ -59,6 +59,27 @@
             </el-radio-button>
           </el-radio-group>
           <p class="option-hint">{{ currentConditionOption?.description }}</p>
+
+          <template v-if="residencePermitCondition === 'stable_residence'">
+            <h4 class="sub-title">请选择您的居住情况</h4>
+            <div class="housing-grid">
+              <button
+                v-for="option in residencePermitHousingOptions"
+                :key="option.value"
+                type="button"
+                class="housing-card"
+                :class="{ active: residencePermitHousingType === option.value }"
+                @click="selectResidencePermitHousing(option.value)"
+              >
+                <el-icon><component :is="option.icon" /></el-icon>
+                <strong>{{ option.label }}</strong>
+                <span>{{ option.description }}</span>
+              </button>
+            </div>
+            <p class="option-hint">
+              您选择了：【{{ currentHousingOption?.fullLabel }}】，请按下方当前居住情况提交对应证明材料。
+            </p>
+          </template>
         </div>
 
         <div v-if="isConvenienceProofService" class="form-section">
@@ -109,7 +130,10 @@
             </button>
           </div>
           <p v-if="isResidencePermitService" class="option-hint">
-            居住证办理需提交“居民身份证、本人相片”以及当前申请条件下的一项证明材料；上方深色标记为本次提交的互斥证明材料。
+            居住证办理需提交“居民身份证、本人相片”以及当前申请条件下的一项证明材料；深色标记为本次提交的互斥证明材料。
+            <span v-if="residencePermitCondition === 'stable_residence' && currentProofOptions.length > 1">
+              {{ currentProofGroupHint }}
+            </span>
           </p>
           <p v-if="isConvenienceProofService" class="option-hint">
             便民证明材料会根据证明类型和具体情形动态生成；必需材料需全部上传，可选材料按实际情况补充。
@@ -147,19 +171,29 @@
               <el-input v-model="applyForm.address" placeholder="请输入详细居住地址" />
             </el-form-item>
             <template v-if="isResidencePermitService">
-              <el-form-item
-                v-if="residencePermitCondition === 'stable_residence'"
-                label="居住起始时间"
-                prop="residenceStartDate"
-              >
-                <el-date-picker
-                  v-model="applyForm.residenceStartDate"
-                  type="date"
-                  value-format="YYYY-MM-DD"
-                  placeholder="请选择居住起始时间"
-                  style="width: 100%"
-                />
-              </el-form-item>
+              <template v-if="residencePermitCondition === 'stable_residence'">
+                <el-form-item label="居住起始日期" prop="residenceStartDate">
+                  <el-date-picker
+                    v-model="applyForm.residenceStartDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择居住起始日期"
+                    :teleported="true"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+                <el-form-item label="居住结束日期" prop="residenceEndDate">
+                  <el-date-picker
+                    v-model="applyForm.residenceEndDate"
+                    type="date"
+                    value-format="YYYY-MM-DD"
+                    placeholder="请选择居住结束日期"
+                    :disabled-date="disableResidenceEndDate"
+                    :teleported="true"
+                    style="width: 100%"
+                  />
+                </el-form-item>
+              </template>
               <el-form-item
                 v-if="residencePermitCondition === 'stable_employment'"
                 label="工作单位"
@@ -243,8 +277,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { FormRules } from 'element-plus'
-import { Document, InfoFilled, Check } from '@element-plus/icons-vue'
+import { ElMessage, type FormRules } from 'element-plus'
+import { Document, InfoFilled, Check, House, OfficeBuilding, School } from '@element-plus/icons-vue'
 import { getPublicMaterialTemplates, getPublicServiceItemList } from '@/api/serviceItem'
 import {
   isIdentityDocumentMaterial,
@@ -268,39 +302,91 @@ const applyForm = ref({
   phone: '',
   address: '',
   residenceStartDate: '',
+  residenceEndDate: '',
   employerName: '',
   workAddress: '',
   schoolName: '',
   enrollmentDate: ''
 })
 
-function material(materialName: string, materialType: string, description: string, isRequired: boolean) {
+function material(
+  materialName: string,
+  materialType: string,
+  description: string,
+  isRequired: boolean,
+  extra: Record<string, any> = {}
+) {
   return {
     templateId: null,
     materialName,
     materialType,
     description,
     sampleUrl: '',
-    isRequired: isRequired ? 1 : 0
+    isRequired: isRequired ? 1 : 0,
+    ...extra
   }
 }
 
 const residencePermitCondition = ref('stable_residence')
+const residencePermitHousingType = ref('rental')
 const residencePermitProofType = ref('rental_contract')
 const convenienceProofType = ref('no_criminal')
 const convenienceScenario = ref('employment')
+
+const residencePermitHousingOptions = [
+  {
+    value: 'rental',
+    label: '租房',
+    fullLabel: '租赁房屋居住',
+    description: '租赁房屋',
+    icon: House,
+    proofOptions: [
+      material('房屋租赁合同', 'rental_contract', '租赁住房申请时提交房屋租赁合同关键页。', true)
+    ],
+    hint: '请上传租赁合同关键页，需包含承租人、房屋地址、租赁期限和双方签字盖章信息。'
+  },
+  {
+    value: 'self_owned',
+    label: '自有房',
+    fullLabel: '自有房屋居住',
+    description: '已购住房',
+    icon: House,
+    proofOptions: [
+      material('房屋产权证明文件', 'real_estate_certificate', '已取得不动产权证时提交房屋产权证明文件或不动产权证书关键信息页。', true),
+      material('购房合同', 'purchase_contract', '尚未取得不动产权证时，可上传购房合同关键页作为替代材料。', true)
+    ],
+    hint: '房屋产权证明文件与购房合同为互斥材料，请上传其中一项；尚未取得不动产权证时可上传购房合同。'
+  },
+  {
+    value: 'company_dorm',
+    label: '单位宿舍',
+    fullLabel: '单位宿舍居住',
+    description: '单位提供',
+    icon: OfficeBuilding,
+    proofOptions: [
+      material('用人单位出具的住宿证明', 'unit_accommodation_proof', '居住在单位宿舍时提交加盖单位公章的住宿证明。', true)
+    ],
+    hint: '请上传用人单位出具并盖章的住宿证明，需写明申请人姓名、住宿地址和住宿期限。'
+  },
+  {
+    value: 'school_dorm',
+    label: '学校',
+    fullLabel: '学校宿舍居住',
+    description: '学生宿舍',
+    icon: School,
+    proofOptions: [
+      material('就读学校出具的住宿证明', 'school_accommodation_proof', '居住在学校宿舍时提交加盖学校公章的住宿证明。', true)
+    ],
+    hint: '请上传就读学校出具并盖章的住宿证明，需写明申请人姓名、宿舍地址和在读住宿情况。'
+  }
+]
 
 const residencePermitConditionOptions = [
   {
     value: 'stable_residence',
     label: '合法稳定住所',
     description: '适用于已在本社区稳定居住，可提供住址证明材料的申请人。',
-    proofOptions: [
-      material('房屋租赁合同', 'rental_contract', '租赁住房申请时提交房屋租赁合同关键页。', true),
-      material('房屋产权证明文件', 'real_estate_certificate', '自有住房申请时提交房屋产权证明文件或不动产权证书关键信息页。', true),
-      material('购房合同', 'purchase_contract', '购房但暂未取得产权证时提交购房合同关键信息页。', true),
-      material('用人单位/就读学校出具的住宿证明', 'unit_accommodation_proof', '居住在单位或学校宿舍时提交加盖公章的住宿证明。', true)
-    ]
+    proofOptions: residencePermitHousingOptions.flatMap(option => option.proofOptions)
   },
   {
     value: 'stable_employment',
@@ -439,13 +525,46 @@ const isConvenienceProofService = computed(() => String(selectedService.value?.n
 const currentConditionOption = computed(() =>
   residencePermitConditionOptions.find(option => option.value === residencePermitCondition.value)
 )
-const currentProofOptions = computed(() => currentConditionOption.value?.proofOptions || [])
+const currentHousingOption = computed(() =>
+  residencePermitHousingOptions.find(option => option.value === residencePermitHousingType.value)
+)
+const currentProofOptions = computed(() => {
+  if (residencePermitCondition.value === 'stable_residence') {
+    return currentHousingOption.value?.proofOptions || []
+  }
+  return currentConditionOption.value?.proofOptions || []
+})
+const currentProofGroupHint = computed(() => currentHousingOption.value?.hint || '')
 const selectedProofMaterial = computed(() =>
   currentProofOptions.value.find(material => material.materialType === residencePermitProofType.value)
 )
+const residencePermitProofGroupLabel = computed(() => {
+  if (residencePermitCondition.value === 'stable_residence') {
+    return currentHousingOption.value?.fullLabel
+      ? `${currentHousingOption.value.fullLabel}证明材料`
+      : '住所证明材料'
+  }
+  return currentConditionOption.value?.label
+    ? `${currentConditionOption.value.label}证明材料`
+    : '申请条件证明材料'
+})
+const residencePermitProofMaterials = computed(() => {
+  const rows = currentProofOptions.value
+  const isAlternativeGroup = rows.length > 1
+  return rows.map((row: any) => ({
+    ...row,
+    isRequired: isAlternativeGroup ? 0 : row.isRequired,
+    alternativeGroup: isAlternativeGroup ? 'residence_permit_proof' : '',
+    alternativeGroupLabel: isAlternativeGroup ? residencePermitProofGroupLabel.value : '',
+    preferred: row.materialType === residencePermitProofType.value,
+    groupHint: isAlternativeGroup
+      ? (row.materialType === residencePermitProofType.value ? '本次提交' : '可替代')
+      : ''
+  }))
+})
 const selectedResidencePermitMaterials = computed(() => [
   ...residencePermitBaseMaterials,
-  selectedProofMaterial.value
+  ...residencePermitProofMaterials.value
 ].filter(Boolean))
 const currentConvenienceProofOption = computed(() =>
   convenienceProofTypeOptions.find(option => option.value === convenienceProofType.value)
@@ -464,13 +583,7 @@ const displayMaterials = computed(() => {
   if (!selectedService.value) return []
   if (isConvenienceProofService.value) return selectedConvenienceMaterials.value
   if (!isResidencePermitService.value) return selectedService.value.materials || []
-  return [
-    ...residencePermitBaseMaterials,
-    ...currentProofOptions.value
-  ].filter(Boolean).map((row: any) => ({
-    ...row,
-    groupHint: row.materialType === residencePermitProofType.value ? '本次提交' : ''
-  }))
+  return selectedResidencePermitMaterials.value
 })
 
 const activeTemplate = computed(() => {
@@ -502,7 +615,43 @@ const formRules: FormRules = {
     }
   ],
   phone: [{ required: true, pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }],
-  address: [{ required: true, message: '请输入地址', trigger: 'blur' }]
+  address: [{ required: true, message: '请输入地址', trigger: 'blur' }],
+  residenceStartDate: [
+    {
+      validator: (_rule: any, value: string, callback: (error?: Error) => void) => {
+        if (residencePermitCondition.value !== 'stable_residence') {
+          callback()
+          return
+        }
+        if (!value) {
+          callback(new Error('请选择居住起始日期'))
+          return
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
+  ],
+  residenceEndDate: [
+    {
+      validator: (_rule: any, value: string, callback: (error?: Error) => void) => {
+        if (residencePermitCondition.value !== 'stable_residence') {
+          callback()
+          return
+        }
+        if (!value) {
+          callback(new Error('请选择居住结束日期'))
+          return
+        }
+        if (applyForm.value.residenceStartDate && value < applyForm.value.residenceStartDate) {
+          callback(new Error('结束日期不能早于起始日期'))
+          return
+        }
+        callback()
+      },
+      trigger: 'change'
+    }
+  ]
 }
 
 async function selectService(service: any) {
@@ -514,12 +663,14 @@ async function selectService(service: any) {
     phone: '',
     address: '',
     residenceStartDate: '',
+    residenceEndDate: '',
     employerName: '',
     workAddress: '',
     schoolName: '',
     enrollmentDate: ''
   }
   residencePermitCondition.value = 'stable_residence'
+  residencePermitHousingType.value = 'rental'
   residencePermitProofType.value = 'rental_contract'
   convenienceProofType.value = 'no_criminal'
   convenienceScenario.value = 'employment'
@@ -562,81 +713,125 @@ function parseSteps(value?: string) {
   }
 }
 
+function needsResidencePeriod() {
+  return isResidencePermitService.value && residencePermitCondition.value === 'stable_residence'
+}
+
+function validateResidencePeriod() {
+  if (!needsResidencePeriod()) return true
+  if (!applyForm.value.residenceStartDate || !applyForm.value.residenceEndDate) {
+    ElMessage.warning('请选择居住起始日期和结束日期')
+    formRef.value?.validateField?.(['residenceStartDate', 'residenceEndDate']).catch?.(() => {})
+    return false
+  }
+  if (applyForm.value.residenceEndDate < applyForm.value.residenceStartDate) {
+    ElMessage.warning('居住结束日期不能早于起始日期')
+    formRef.value?.validateField?.('residenceEndDate').catch?.(() => {})
+    return false
+  }
+  return true
+}
+
+function disableResidenceEndDate(date: Date) {
+  if (!applyForm.value.residenceStartDate) return false
+  const start = new Date(`${applyForm.value.residenceStartDate} 00:00:00`).getTime()
+  return date.getTime() < start
+}
+
 async function nextStep() {
-  await formRef.value?.validate(async (valid: boolean) => {
-    if (!valid) return
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid || !validateResidencePeriod()) return
 
-    nextLoading.value = true
-    try {
-      const templates = await getPublicMaterialTemplates(Number(selectedService.value.id)).catch(() => [])
-      const serviceMaterials = isResidencePermitService.value
-        ? selectedResidencePermitMaterials.value
+  nextLoading.value = true
+  try {
+    const templates = await getPublicMaterialTemplates(Number(selectedService.value.id)).catch(() => [])
+    const serviceMaterials = isResidencePermitService.value
+      ? selectedResidencePermitMaterials.value
+      : isConvenienceProofService.value
+        ? selectedConvenienceMaterials.value
+      : mergeMaterials(templates, selectedService.value.materials)
+
+    const tempData = {
+      serviceId: selectedService.value.id,
+      serviceName: selectedService.value.name,
+      serviceCategory: selectedService.value.category,
+      serviceConditions: selectedService.value.conditions,
+      applicationCondition: isResidencePermitService.value
+        ? {
+            condition: residencePermitCondition.value,
+            conditionLabel: currentConditionOption.value?.label,
+            housingType: residencePermitHousingType.value,
+            housingLabel: currentHousingOption.value?.fullLabel,
+            proofType: residencePermitProofType.value,
+            proofLabel: selectedProofMaterial.value?.materialName
+          }
         : isConvenienceProofService.value
-          ? selectedConvenienceMaterials.value
-        : mergeMaterials(templates, selectedService.value.materials)
-
-      const tempData = {
-        serviceId: selectedService.value.id,
-        serviceName: selectedService.value.name,
-        serviceCategory: selectedService.value.category,
-        serviceConditions: selectedService.value.conditions,
-        applicationCondition: isResidencePermitService.value
           ? {
-              condition: residencePermitCondition.value,
-              conditionLabel: currentConditionOption.value?.label,
-              proofType: residencePermitProofType.value,
-              proofLabel: selectedProofMaterial.value?.materialName
+              proofType: convenienceProofType.value,
+              proofLabel: currentConvenienceProofOption.value?.label,
+              scenario: convenienceScenario.value,
+              scenarioLabel: currentConvenienceScenario.value?.label
             }
+        : null,
+      serviceMaterials,
+      serviceProcess: selectedService.value.process,
+      formData: {
+        name: applyForm.value.name,
+        idCard: applyForm.value.idCard,
+        phone: applyForm.value.phone,
+        address: applyForm.value.address,
+        residenceStartDate: applyForm.value.residenceStartDate,
+        residenceEndDate: applyForm.value.residenceEndDate,
+        employerName: applyForm.value.employerName,
+        workAddress: applyForm.value.workAddress,
+        schoolName: applyForm.value.schoolName,
+        enrollmentDate: applyForm.value.enrollmentDate,
+        applicationCondition: isResidencePermitService.value ? residencePermitCondition.value : '',
+        applicationConditionLabel: isResidencePermitService.value ? currentConditionOption.value?.label : '',
+        housingType: isResidencePermitService.value ? residencePermitHousingType.value : '',
+        housingLabel: isResidencePermitService.value ? currentHousingOption.value?.fullLabel : '',
+        proofType: isResidencePermitService.value
+          ? residencePermitProofType.value
           : isConvenienceProofService.value
-            ? {
-                proofType: convenienceProofType.value,
-                proofLabel: currentConvenienceProofOption.value?.label,
-                scenario: convenienceScenario.value,
-                scenarioLabel: currentConvenienceScenario.value?.label
-              }
-          : null,
-        serviceMaterials,
-        serviceProcess: selectedService.value.process,
-        formData: {
-          name: applyForm.value.name,
-          idCard: applyForm.value.idCard,
-          phone: applyForm.value.phone,
-          address: applyForm.value.address,
-          residenceStartDate: applyForm.value.residenceStartDate,
-          employerName: applyForm.value.employerName,
-          workAddress: applyForm.value.workAddress,
-          schoolName: applyForm.value.schoolName,
-          enrollmentDate: applyForm.value.enrollmentDate,
-          applicationCondition: isResidencePermitService.value ? residencePermitCondition.value : '',
-          applicationConditionLabel: isResidencePermitService.value ? currentConditionOption.value?.label : '',
-          proofType: isResidencePermitService.value
-            ? residencePermitProofType.value
-            : isConvenienceProofService.value
-              ? convenienceProofType.value
-              : '',
-          proofLabel: isResidencePermitService.value
-            ? selectedProofMaterial.value?.materialName
-            : isConvenienceProofService.value
-              ? currentConvenienceProofOption.value?.label
-              : '',
-          scenario: isConvenienceProofService.value ? convenienceScenario.value : '',
-          scenarioLabel: isConvenienceProofService.value ? currentConvenienceScenario.value?.label : ''
-        }
+            ? convenienceProofType.value
+            : '',
+        proofLabel: isResidencePermitService.value
+          ? selectedProofMaterial.value?.materialName
+          : isConvenienceProofService.value
+            ? currentConvenienceProofOption.value?.label
+            : '',
+        scenario: isConvenienceProofService.value ? convenienceScenario.value : '',
+        scenarioLabel: isConvenienceProofService.value ? currentConvenienceScenario.value?.label : ''
       }
-      sessionStorage.setItem('tempApplication', JSON.stringify(tempData))
-      showFormDrawer.value = false
-      router.push({
-        path: '/material-upload',
-        query: { serviceId: selectedService.value.id }
-      })
-    } finally {
-      nextLoading.value = false
     }
-  })
+    sessionStorage.setItem('tempApplication', JSON.stringify(tempData))
+    showFormDrawer.value = false
+    router.push({
+      path: '/material-upload',
+      query: { serviceId: selectedService.value.id }
+    })
+  } finally {
+    nextLoading.value = false
+  }
 }
 
 watch(residencePermitCondition, () => {
+  if (residencePermitCondition.value === 'stable_residence') {
+    residencePermitHousingType.value = 'rental'
+  }
   residencePermitProofType.value = currentProofOptions.value[0]?.materialType || ''
+})
+
+watch(residencePermitHousingType, () => {
+  if (residencePermitCondition.value === 'stable_residence') {
+    residencePermitProofType.value = currentProofOptions.value[0]?.materialType || ''
+  }
+})
+
+watch(() => applyForm.value.residenceStartDate, (value) => {
+  if (value && applyForm.value.residenceEndDate && applyForm.value.residenceEndDate < value) {
+    applyForm.value.residenceEndDate = ''
+  }
 })
 
 watch(convenienceProofType, () => {
@@ -654,6 +849,10 @@ function handleMaterialClick(row: any) {
   }
   activeMaterial.value = row
   materialDialogVisible.value = true
+}
+
+function selectResidencePermitHousing(value: string) {
+  residencePermitHousingType.value = value
 }
 
 function downloadActiveTemplate() {
@@ -706,15 +905,6 @@ function getFallbackMaterials(item: any) {
       material('婚姻登记档案证明', 'marriage_archive_proof', '向原登记机关申请调取。', false),
       material('婚姻状况说明承诺书', 'marital_status_commitment', '无法提供完整档案时补充说明并签字承诺。', false),
       material('同一人身份证明', 'same_person_identity_proof', '按实际证明类型提交。', false)
-    ]
-  }
-  if (name.includes('助餐') || name.includes('服务预约')) {
-    return [
-      material('身份证', 'id_card', '申请人身份证明材料。', true),
-      material('社保卡', 'social_security_card', '用于核验身份及服务资格。', true),
-      material('助餐服务申请表', 'meal_service_application', '请下载模板填写助餐服务需求和紧急联系人。', true),
-      material('户口簿', 'household_register', '非本地首次申请时提交。', false),
-      material('居住证', 'residence_permit_card', '非本地老年居民申请时提交。', false)
     ]
   }
   return [
@@ -863,6 +1053,48 @@ onMounted(loadServices)
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.housing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.housing-card {
+  border: 0.0625rem solid var(--border-color);
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  padding: 0.875rem;
+  min-height: 6.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.housing-card:hover,
+.housing-card.active {
+  border-color: var(--gold);
+  background: rgba(212, 168, 67, 0.08);
+  color: var(--text-primary);
+}
+
+.housing-card .el-icon {
+  font-size: 1.5rem;
+}
+
+.housing-card strong {
+  font-size: 0.95rem;
+}
+
+.housing-card span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .option-hint {

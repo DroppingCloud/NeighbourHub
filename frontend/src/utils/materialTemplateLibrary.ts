@@ -463,27 +463,6 @@ export const builtInMaterialTemplates: BuiltInMaterialTemplate[] = [
       ${signature('委托人签字')}
       ${signature('受托人签字')}
     `
-  },
-  {
-    key: 'meal-service-application',
-    fileName: '助餐服务申请表.docx',
-    title: '助餐服务申请表',
-    description: '用于助餐服务预约，填写用餐需求和紧急联系人。',
-    contentHtml: `
-      <h1>助餐服务申请表</h1>
-      ${table([
-        ['申请人姓名', '张某某'],
-        ['身份证号', '110101194501011234'],
-        ['年龄', '80周岁'],
-        ['联系电话', '13900000000'],
-        ['居住地址', 'XX市XX区XX街道XX小区'],
-        ['助餐类型', '午餐/晚餐'],
-        ['就餐方式', '到店用餐/送餐到家'],
-        ['紧急联系人', '张三/子女/13800000000']
-      ])}
-      <p>本人承诺以上信息真实有效，并同意遵守社区助餐服务相关规定。</p>
-      ${signature()}
-    `
   }
 ]
 
@@ -493,7 +472,7 @@ export function resolveBuiltInMaterialTemplate(materialName: string, materialTyp
     [/房屋租赁合同|rental_contract/i, 'house-rental-contract'],
     [/不动产权证书|房屋产权证明文件|房产证|real_estate_certificate/i, 'real-estate-certificate'],
     [/购房合同|purchase_contract/i, 'purchase-contract'],
-    [/住宿证明|单位住宿证明|用人单位\/就读学校出具的住宿证明|unit_accommodation_proof/i, 'unit-accommodation-proof'],
+    [/住宿证明|单位住宿证明|学校住宿证明|用人单位出具的住宿证明|就读学校出具的住宿证明|用人单位\/就读学校出具的住宿证明|unit_accommodation_proof|school_accommodation_proof/i, 'unit-accommodation-proof'],
     [/工商营业执照|营业执照|business_license/i, 'business-license'],
     [/劳动合同|labor_contract/i, 'labor-contract'],
     [/劳动关系证明|labor_relation_proof/i, 'labor-relation-proof'],
@@ -513,8 +492,7 @@ export function resolveBuiltInMaterialTemplate(materialName: string, materialTyp
     [/无犯罪记录证明|no_criminal_record_proof/i, 'no-criminal-record-proof'],
     [/低收入|困难证明|low_income_hardship_proof/i, 'low-income-hardship-proof'],
     [/同一人身份证明|same_person_identity_proof/i, 'same-person-identity-proof'],
-    [/申请事由说明|application_reason_note/i, 'application-reason-note'],
-    [/助餐服务申请表|meal_service_application/i, 'meal-service-application']
+    [/申请事由说明|application_reason_note/i, 'application-reason-note']
   ]
   const found = rules.find(([pattern]) => pattern.test(source))
   return found ? builtInMaterialTemplates.find(template => template.key === found[1]) : undefined
