@@ -148,9 +148,9 @@
               :key="index"
               class="step-item"
             >
-              <div class="step-number">{{ index + 1 }}</div>
+              <div class="step-number">{{ Number(index) + 1 }}</div>
               <div class="step-title">{{ step }}</div>
-              <div v-if="index < selectedService.process.length - 1" class="step-line"></div>
+              <div v-if="Number(index) < selectedService.process.length - 1" class="step-line"></div>
             </div>
           </div>
         </div>
@@ -276,7 +276,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormRules } from 'element-plus'
 import { Document, InfoFilled, Check, House, OfficeBuilding, School } from '@element-plus/icons-vue'
 import { getPublicMaterialTemplates, getPublicServiceItemList } from '@/api/serviceItem'
@@ -287,6 +287,7 @@ import {
 } from '@/utils/materialTemplateLibrary'
 
 const router = useRouter()
+const route = useRoute()
 const govServices = ref<any[]>([])
 const selectedService = ref<any>(null)
 const showFormDrawer = ref(false)
@@ -695,6 +696,15 @@ async function loadServices() {
       materials: getFallbackMaterials(item),
       process: parseSteps(item.processSteps)
     }))
+    const targetName = String(route.query.itemName || '')
+    if (targetName) {
+      const target = govServices.value.find(service =>
+        targetName.includes(service.name) || service.name.includes(targetName)
+      )
+      if (target) {
+        await selectService(target)
+      }
+    }
   } catch {
     govServices.value = []
   } finally {

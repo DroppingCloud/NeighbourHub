@@ -51,11 +51,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createBooking } from '@/api/booking'
 
 type ServiceType = 'dining' | 'accompany' | 'home_visit'
+const route = useRoute()
 
 const serviceTypes = [
   { value: 'dining' as const, label: '助餐服务', desc: '社区食堂配送到家' },
@@ -97,6 +99,13 @@ async function submitBooking() {
     }
   })
 }
+
+onMounted(() => {
+  const queryType = String(route.query.serviceType || '')
+  if (serviceTypes.some(type => type.value === queryType)) {
+    selectedType.value = queryType as ServiceType
+  }
+})
 </script>
 
 <style scoped>

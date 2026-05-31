@@ -42,6 +42,9 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 
 jwt:
   secret: ${JWT_SECRET:default-dev-secret-please-change-in-production}
@@ -58,11 +61,14 @@ springdoc:
     path: /v3/api-docs
 
 ai:
-  api-key: ${AI_API_KEY:}
-  api-url: ${AI_API_URL:}
-  # AI 服务不可用时自动降级为规则匹配
-  fallback-enabled: true
-
+  provider: deepseek 
+  api:
+    key: ${AI_API_KEY:}  
+    url: ${AI_API_URL:https://api.deepseek.com/v1/chat/completions}
+  model: deepseek-chat
+  timeout: 30000
+  max-tokens: 2000
+  fallback-enabled: true 
 logging:
   level:
     com.community.platform: DEBUG
