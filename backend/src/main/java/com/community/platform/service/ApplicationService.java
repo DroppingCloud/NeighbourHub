@@ -10,4 +10,5 @@ public interface ApplicationService {
     Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query);
     ApplicationVO getDetail(Long userId, Long applicationId);
     void resubmit(Long userId, Long applicationId, ApplicationSubmitDTO dto);
+    void withdraw(Long userId, Long applicationId);
 }

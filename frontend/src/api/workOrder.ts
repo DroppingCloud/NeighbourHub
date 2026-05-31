@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import type { MaterialCompletenessVO } from './application'
 
 export interface WorkOrderVO {
   orderId: number
@@ -9,6 +10,7 @@ export interface WorkOrderVO {
   statusLabel: string
   auditOpinion?: string
   staffName?: string
+  materialCompleteness?: MaterialCompletenessVO
   createTime: string
   updateTime: string
 }

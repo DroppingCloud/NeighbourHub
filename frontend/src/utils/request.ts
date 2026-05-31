@@ -1,25 +1,33 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
+import { useAuthStore } from '@/stores/auth'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   timeout: 10000
 })
 
-// 请求拦截器：注入 Token
 request.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
+      config.headers.Authorization = `Bearer ${token}`
     }
     return config
   },
   (error) => Promise.reject(error)
 )
 
-// 响应拦截器：统一处理错误
+function clearLoginAndRedirect(message: string) {
+  const authStore = useAuthStore()
+  authStore.logout()
+  ElMessage.error(message)
+  if (router.currentRoute.value.path !== '/login') {
+    router.replace('/login')
+  }
+}
+
 request.interceptors.response.use(
   (response) => {
     const { code, message, data } = response.data
@@ -27,16 +35,25 @@ request.interceptors.response.use(
       return data
     }
     if (code === 401) {
-      localStorage.removeItem('token')
-      router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
+      clearLoginAndRedirect(message || '登录已过期，请重新登录')
+    } else if (code === 403) {
+      ElMessage.error(message || '权限不足，无法访问该功能')
     } else {
       ElMessage.error(message || '请求失败')
     }
-    return Promise.reject(new Error(message))
+    return Promise.reject(new Error(message || '请求失败'))
   },
   (error) => {
-    ElMessage.error(error.message || '网络异常，请稍后重试')
+    const status = error.response?.status
+    const message = error.response?.data?.message
+
+    if (status === 401) {
+      clearLoginAndRedirect(message || '登录已过期，请重新登录')
+    } else if (status === 403) {
+      clearLoginAndRedirect(message || '登录状态无效，请重新登录')
+    } else {
+      ElMessage.error(message || error.message || '网络异常，请稍后重试')
+    }
     return Promise.reject(error)
   }
 )

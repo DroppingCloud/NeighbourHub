@@ -8,7 +8,6 @@ public class ApplicationMaterialDTO {
 
     private Long templateId;
 
-    @NotBlank(message = "材料名称不能为空")
     private String materialName;
 
     @NotBlank(message = "文件名不能为空")

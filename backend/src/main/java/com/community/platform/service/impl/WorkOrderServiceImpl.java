@@ -18,8 +18,10 @@ import com.community.platform.mapper.ServiceItemMapper;
 import com.community.platform.mapper.UserMapper;
 import com.community.platform.mapper.WorkOrderLogMapper;
 import com.community.platform.mapper.WorkOrderMapper;
+import com.community.platform.service.ApplicationMaterialService;
 import com.community.platform.service.NoticeService;
 import com.community.platform.service.WorkOrderService;
+import com.community.platform.vo.application.MaterialCompletenessVO;
 import com.community.platform.vo.workorder.WorkOrderVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final ServiceItemMapper serviceItemMapper;
     private final ResidentProfileMapper residentProfileMapper;
     private final UserMapper userMapper;
+    private final ApplicationMaterialService applicationMaterialService;
     private final NoticeService noticeService;
 
     @Override
@@ -70,23 +73,43 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         WorkOrder order = requireOrder(dto.getOrderId());
         String fromStatus = order.getStatus();
         String toStatus = "processing".equals(dto.getAction()) ? "approved" : dto.getAction();
+        String auditOpinion = dto.getOpinion();
+
+        ApplicationForm application = applicationFormMapper.selectById(order.getApplicationId());
+        if (application != null && "supplement_required".equals(toStatus)) {
+            MaterialCompletenessVO completeness = applicationMaterialService.checkCompletenessForSystem(application.getApplicationId());
+            if (!Boolean.TRUE.equals(completeness.getComplete())) {
+                String missingMessage = "缺少：" + String.join("、", completeness.getMissingMaterialNames());
+                auditOpinion = StringUtils.hasText(auditOpinion) ? auditOpinion + "；" + missingMessage : missingMessage;
+            }
+        }
 
         order.setStaffUserId(staffUserId);
         order.setStatus(toStatus);
-        order.setAuditOpinion(dto.getOpinion());
+        order.setAuditOpinion(auditOpinion);
         if ("completed".equals(toStatus)) {
             order.setFinishTime(LocalDateTime.now());
         }
         workOrderMapper.updateById(order);
 
-        ApplicationForm application = applicationFormMapper.selectById(order.getApplicationId());
         if (application != null) {
+            if (Set.of("approved", "completed").contains(toStatus)) {
+                MaterialCompletenessVO completeness = applicationMaterialService.checkCompletenessForSystem(application.getApplicationId());
+                if (!Boolean.TRUE.equals(completeness.getComplete())) {
+                    throw new BusinessException(
+                            ResultCode.BAD_REQUEST,
+                            "必填材料不完整，缺少：" + String.join("、", completeness.getMissingMaterialNames()));
+                }
+                if (applicationMaterialService.hasFailedPrecheckForSystem(application.getApplicationId())) {
+                    throw new BusinessException(ResultCode.BAD_REQUEST, "存在预审未通过的材料，不能审核通过或办结");
+                }
+            }
             application.setStatus(toStatus);
             applicationFormMapper.updateById(application);
             noticeService.sendNotice(
                     application.getUserId(),
                     noticeTitle(toStatus),
-                    noticeContent(toStatus, dto.getOpinion()),
+                    noticeContent(toStatus, auditOpinion),
                     "audit_result",
                     "application",
                     application.getApplicationId());
@@ -98,7 +121,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         log.setAction(dto.getAction());
         log.setFromStatus(fromStatus);
         log.setToStatus(toStatus);
-        log.setRemark(dto.getOpinion());
+        log.setRemark(auditOpinion);
         workOrderLogMapper.insert(log);
     }
 
@@ -132,6 +155,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         vo.setStatusLabel(statusLabel(order.getStatus()));
         vo.setAuditOpinion(order.getAuditOpinion());
         vo.setStaffName(staff == null ? null : staff.getUsername());
+        vo.setMaterialCompleteness(application == null ? null : applicationMaterialService.checkCompletenessForSystem(application.getApplicationId()));
         vo.setCreateTime(order.getCreateTime());
         vo.setUpdateTime(order.getUpdateTime());
         return vo;
