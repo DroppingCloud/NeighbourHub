@@ -39,4 +39,6 @@ public class ResidentProfile {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    private Long communityId;
 }

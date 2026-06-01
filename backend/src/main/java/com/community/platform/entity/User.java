@@ -34,4 +34,7 @@ public class User {
 
     @TableLogic
     private Integer deleted;
+
+    private String role;
+    private Long communityId;
 }

@@ -1,6 +1,7 @@
 package com.community.platform.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.community.platform.common.BusinessException;
 import com.community.platform.common.ResultCode;
@@ -12,6 +13,7 @@ import com.community.platform.entity.ServiceItem;
 import com.community.platform.entity.User;
 import com.community.platform.entity.WorkOrder;
 import com.community.platform.entity.WorkOrderLog;
+import com.community.platform.enums.WorkOrderStatus;
 import com.community.platform.mapper.ApplicationFormMapper;
 import com.community.platform.mapper.ResidentProfileMapper;
 import com.community.platform.mapper.ServiceItemMapper;
@@ -19,8 +21,11 @@ import com.community.platform.mapper.UserMapper;
 import com.community.platform.mapper.WorkOrderLogMapper;
 import com.community.platform.mapper.WorkOrderMapper;
 import com.community.platform.service.ApplicationMaterialService;
+import com.community.platform.service.ApplicationService;
 import com.community.platform.service.NoticeService;
 import com.community.platform.service.WorkOrderService;
+import com.community.platform.common.utils.SecurityUtils;
+import com.community.platform.vo.application.ApplicationVO;
 import com.community.platform.vo.application.MaterialCompletenessVO;
 import com.community.platform.vo.workorder.WorkOrderVO;
 import lombok.RequiredArgsConstructor;
@@ -29,11 +34,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.context.annotation.Lazy;
 
 @Service
-@RequiredArgsConstructor
 public class WorkOrderServiceImpl implements WorkOrderService {
 
     private static final Set<String> ACTIONS = Set.of("approved", "rejected", "supplement_required", "completed", "processing");
@@ -46,13 +54,51 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final UserMapper userMapper;
     private final ApplicationMaterialService applicationMaterialService;
     private final NoticeService noticeService;
+    private final ApplicationService applicationService;  // 仍然 final
+
+    // 显式构造器，在 ApplicationService 参数上添加 @Lazy
+    public WorkOrderServiceImpl(WorkOrderMapper workOrderMapper,
+                                WorkOrderLogMapper workOrderLogMapper,
+                                ApplicationFormMapper applicationFormMapper,
+                                ServiceItemMapper serviceItemMapper,
+                                ResidentProfileMapper residentProfileMapper,
+                                UserMapper userMapper,
+                                ApplicationMaterialService applicationMaterialService,
+                                NoticeService noticeService,
+                                @Lazy ApplicationService applicationService) {
+        this.workOrderMapper = workOrderMapper;
+        this.workOrderLogMapper = workOrderLogMapper;
+        this.applicationFormMapper = applicationFormMapper;
+        this.serviceItemMapper = serviceItemMapper;
+        this.residentProfileMapper = residentProfileMapper;
+        this.userMapper = userMapper;
+        this.applicationMaterialService = applicationMaterialService;
+        this.noticeService = noticeService;
+        this.applicationService = applicationService;
+    }
+
+    // ==================== 原有方法（增强） ====================
 
     @Override
     public Page<WorkOrderVO> getList(WorkOrderQueryDTO query) {
-        LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<WorkOrder>()
-                .eq(StringUtils.hasText(query.getStatus()), WorkOrder::getStatus, query.getStatus())
-                .eq(query.getStaffUserId() != null, WorkOrder::getStaffUserId, query.getStaffUserId())
-                .orderByDesc(WorkOrder::getCreateTime);
+        LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
+        
+        // 状态过滤：如果前端传了 status，则精确匹配；否则查询 pending 和 processing
+        if (StringUtils.hasText(query.getStatus())) {
+            wrapper.eq(WorkOrder::getStatus, query.getStatus());
+        } else {
+            wrapper.in(WorkOrder::getStatus, List.of("pending", "processing"));
+        }
+        
+        wrapper.eq(query.getStaffUserId() != null, WorkOrder::getStaffUserId, query.getStaffUserId())
+               .orderByDesc(WorkOrder::getCreateTime);
+
+        // 社区数据隔离 - 工作人员只能看到本社区的工单
+        User currentUser = SecurityUtils.getCurrentUser();
+        if (currentUser != null && "staff".equals(currentUser.getRole()) && currentUser.getCommunityId() != null) {
+            wrapper.eq(WorkOrder::getCommunityId, currentUser.getCommunityId());
+        }
+
         Page<WorkOrder> page = workOrderMapper.selectPage(new Page<>(page(query.getPageNum()), size(query.getPageSize())), wrapper);
         Page<WorkOrderVO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         result.setRecords(page.getRecords().stream().map(this::toWorkOrderVO).toList());
@@ -67,14 +113,47 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     @Override
     @Transactional
     public void audit(Long staffUserId, WorkOrderAuditDTO dto) {
+        // 1. 基础校验
         if (!ACTIONS.contains(dto.getAction())) {
             throw new BusinessException(ResultCode.WORK_ORDER_STATUS_ERROR);
         }
+
         WorkOrder order = requireOrder(dto.getOrderId());
+
+        // ========== 新增：如果当前是 pending，先转为 processing ==========
+        if ("pending".equals(order.getStatus())) {
+            // 记录开始处理日志
+            WorkOrderLog startLog = new WorkOrderLog();
+            startLog.setOrderId(order.getOrderId());
+            startLog.setOperatorId(staffUserId);
+            startLog.setAction("start_processing");
+            startLog.setFromStatus("pending");
+            startLog.setToStatus("processing");
+            startLog.setRemark("工作人员开始处理");
+            workOrderLogMapper.insert(startLog);
+    
+            // 更新状态为 processing
+            order.setStatus("processing");
+            workOrderMapper.updateById(order);
+        }
         String fromStatus = order.getStatus();
-        String toStatus = "processing".equals(dto.getAction()) ? "approved" : dto.getAction();
+        String toStatus = calculateTargetStatus(dto.getAction());
+
+        // 2. 状态机校验
+        if (!WorkOrderStatus.isValidTransition(fromStatus, toStatus)) {
+            throw new BusinessException(ResultCode.WORK_ORDER_STATUS_ERROR,
+                    "不允许从 " + fromStatus + " 转换到 " + toStatus);
+        }
+
+        // 3. 社区权限校验：工作人员只能处理本社区工单
+        User staff = userMapper.selectById(staffUserId);
+        if (staff != null && "staff".equals(staff.getRole()) && !staff.getCommunityId().equals(order.getCommunityId())) {
+            throw new BusinessException(ResultCode.NO_PERMISSION, "您无权处理其他社区的工单");
+        }
+
         String auditOpinion = dto.getOpinion();
 
+        // 补件时预填缺失材料信息
         ApplicationForm application = applicationFormMapper.selectById(order.getApplicationId());
         if (application != null && "supplement_required".equals(toStatus)) {
             MaterialCompletenessVO completeness = applicationMaterialService.checkCompletenessForSystem(application.getApplicationId());
@@ -84,6 +163,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             }
         }
 
+        // 更新工单
         order.setStaffUserId(staffUserId);
         order.setStatus(toStatus);
         order.setAuditOpinion(auditOpinion);
@@ -92,6 +172,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         }
         workOrderMapper.updateById(order);
 
+        // 同步申请单状态
         if (application != null) {
             if (Set.of("approved", "completed").contains(toStatus)) {
                 MaterialCompletenessVO completeness = applicationMaterialService.checkCompletenessForSystem(application.getApplicationId());
@@ -115,6 +196,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                     application.getApplicationId());
         }
 
+        // 记录操作日志
         WorkOrderLog log = new WorkOrderLog();
         log.setOrderId(order.getOrderId());
         log.setOperatorId(staffUserId);
@@ -134,6 +216,120 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .orderByAsc(WorkOrderLog::getLogId));
     }
 
+    // ==================== 新增方法（工单分配、转派、批量审核等） ====================
+
+    @Override
+    @Transactional
+    public void assign(Long orderId) {
+        WorkOrder order = requireOrder(orderId);
+        if (order.getStaffUserId() != null) {
+            return; // 已分配
+        }
+        if (order.getCommunityId() == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "工单无社区信息，无法分配");
+        }
+        // 查询同社区、角色为 staff 的用户
+        List<User> staffList = userMapper.selectList(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, "staff")
+                .eq(User::getCommunityId, order.getCommunityId()));
+        if (staffList.isEmpty()) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "该社区暂无工作人员，请联系管理员");
+        }
+        // 计算每个工作人员的待处理工单数量
+        Map<Long, Long> workload = staffList.stream().collect(Collectors.toMap(
+                User::getUserId,
+                u -> workOrderMapper.selectCount(new LambdaQueryWrapper<WorkOrder>()
+                        .eq(WorkOrder::getStaffUserId, u.getUserId())
+                        .in(WorkOrder::getStatus, List.of("pending", "processing")))
+        ));
+        Long assigneeId = staffList.stream()
+                .min(Comparator.comparingLong(u -> workload.getOrDefault(u.getUserId(), 0L)))
+                .map(User::getUserId)
+                .orElse(null);
+        if (assigneeId == null) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "无法找到合适的工作人员");
+        }
+        order.setStaffUserId(assigneeId);
+        // 注意：不要修改状态，保持 pending
+        workOrderMapper.updateById(order);
+
+        WorkOrderLog log = new WorkOrderLog();
+        log.setOrderId(orderId);
+        log.setOperatorId(assigneeId);
+        log.setAction("assign");
+        log.setFromStatus("pending");
+        log.setToStatus("pending");  // 状态未变
+        log.setRemark("自动分配工作人员");
+        workOrderLogMapper.insert(log);
+    }
+
+    @Override
+    @Transactional
+    public void autoReassign(Long orderId) {
+        WorkOrder order = requireOrder(orderId);
+        if (!"pending".equals(order.getStatus()) && !"processing".equals(order.getStatus())) {
+            return;
+        }
+        Long oldStaffId = order.getStaffUserId();
+        // 查找同社区其他工作人员，排除当前工作人员
+        List<User> otherStaff = userMapper.selectList(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, "staff")
+                .eq(User::getCommunityId, order.getCommunityId())
+                .ne(oldStaffId != null, User::getUserId, oldStaffId));
+        if (otherStaff.isEmpty()) {
+            // 无其他工作人员，发送管理员告警
+            Long adminId = getAdminUserId();
+            if (adminId != null) {
+                noticeService.sendNotice(adminId, "工单转派失败",
+                        "工单 #" + orderId + " 超时但无其他工作人员可转派",
+                        "timeout_warning", "work_order", orderId);
+            }
+            return;
+        }
+        // 按工作量最少选择
+        User newStaff = otherStaff.stream()
+                .min(Comparator.comparingLong(u -> workOrderMapper.selectCount(
+                        new LambdaQueryWrapper<WorkOrder>()
+                                .eq(WorkOrder::getStaffUserId, u.getUserId())
+                                .in(WorkOrder::getStatus, List.of("pending", "processing")))))
+                .orElse(otherStaff.get(0));
+
+        order.setStaffUserId(newStaff.getUserId());
+        workOrderMapper.updateById(order);
+
+        // 记录转派日志
+        WorkOrderLog log = new WorkOrderLog();
+        log.setOrderId(orderId);
+        log.setOperatorId(newStaff.getUserId());
+        log.setAction("reassign");
+        log.setFromStatus(order.getStatus());
+        log.setToStatus(order.getStatus());
+        log.setRemark("超时自动转派，原处理人：" + (oldStaffId == null ? "无" : oldStaffId));
+        workOrderLogMapper.insert(log);
+
+        // 发送通知给新工作人员
+        noticeService.sendNotice(newStaff.getUserId(), "工单转派通知",
+                "您有一笔超时工单已转派给您，工单号：" + orderId,
+                "system", "work_order", orderId);
+    }
+
+    @Override
+    @Transactional
+    public void batchAudit(Long staffUserId, List<WorkOrderAuditDTO> audits) {
+        for (WorkOrderAuditDTO dto : audits) {
+            audit(staffUserId, dto);
+        }
+    }
+
+    @Override
+    public void updateStatusByApplicationId(Long applicationId, String status) {
+        workOrderMapper.update(null, new LambdaUpdateWrapper<WorkOrder>()
+                .eq(WorkOrder::getApplicationId, applicationId)
+                .set(WorkOrder::getStatus, status));
+    }
+
+    // ==================== 私有辅助方法 ====================
+
     private WorkOrder requireOrder(Long orderId) {
         WorkOrder order = workOrderMapper.selectById(orderId);
         if (order == null) {
@@ -142,10 +338,29 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         return order;
     }
 
+    private String calculateTargetStatus(String action) {
+        return switch (action) {
+            case "processing" -> "processing";
+            case "approved" -> "approved";
+            case "rejected" -> "rejected";
+            case "supplement_required" -> "supplement_required";
+            case "completed" -> "completed";
+            default -> throw new BusinessException(ResultCode.BAD_REQUEST, "无效操作");
+        };
+    }
+
+    private Long getAdminUserId() {
+        User admin = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getRole, "admin")
+                .last("LIMIT 1"));
+        return admin == null ? null : admin.getUserId();
+    }
+
     private WorkOrderVO toWorkOrderVO(WorkOrder order) {
         ApplicationForm application = applicationFormMapper.selectById(order.getApplicationId());
         ServiceItem item = application == null ? null : serviceItemMapper.selectById(application.getItemId());
         User staff = order.getStaffUserId() == null ? null : userMapper.selectById(order.getStaffUserId());
+
         WorkOrderVO vo = new WorkOrderVO();
         vo.setOrderId(order.getOrderId());
         vo.setApplicationId(order.getApplicationId());
@@ -158,6 +373,16 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         vo.setMaterialCompleteness(application == null ? null : applicationMaterialService.checkCompletenessForSystem(application.getApplicationId()));
         vo.setCreateTime(order.getCreateTime());
         vo.setUpdateTime(order.getUpdateTime());
+
+        // 增强：返回完整的申请详情（包含表单数据和材料列表）
+        if (application != null) {
+            try {
+                ApplicationVO applicationDetail = applicationService.getDetailForInternal(application.getApplicationId());
+                vo.setApplicationDetail(applicationDetail);
+            } catch (Exception e) {
+                // 忽略异常，不阻断主流程
+            }
+        }
         return vo;
     }
 

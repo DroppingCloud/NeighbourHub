@@ -2,6 +2,7 @@ package com.community.platform.vo.workorder;
 
 import com.community.platform.vo.application.MaterialCompletenessVO;
 import lombok.Data;
+import com.community.platform.vo.application.ApplicationVO;
 
 import java.time.LocalDateTime;
 
@@ -32,4 +33,6 @@ public class WorkOrderVO {
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
+
+    private ApplicationVO applicationDetail;
 }

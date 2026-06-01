@@ -13,4 +13,8 @@ public interface WorkOrderService {
     WorkOrderVO getDetail(Long orderId);
     void audit(Long staffUserId, WorkOrderAuditDTO dto);
     List<WorkOrderLog> getLogs(Long orderId);
+    void assign(Long orderId);
+    void autoReassign(Long orderId);
+    void batchAudit(Long staffUserId, List<WorkOrderAuditDTO> audits);
+    void updateStatusByApplicationId(Long applicationId, String status);
 }

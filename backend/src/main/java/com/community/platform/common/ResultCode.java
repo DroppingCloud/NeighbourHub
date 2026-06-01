@@ -37,7 +37,8 @@ public enum ResultCode {
     SERVICE_NOT_AVAILABLE(2301, "服务暂不可用"),
     TIME_CONFLICT(2302, "预约时间冲突"),
     BOOKING_NOT_EXISTS(2303, "预约记录不存在"),
-    BOOKING_STATUS_ERROR(2304, "预约状态不允许该操作");
+    BOOKING_STATUS_ERROR(2304, "预约状态不允许该操作"),
+    NO_PERMISSION(403, "无权限访问");
 
     private final Integer code;
     private final String message;

@@ -39,4 +39,6 @@ public class WorkOrder {
     private LocalDateTime updateTime;
 
     private LocalDateTime finishTime;
+
+    private Long communityId;
 }

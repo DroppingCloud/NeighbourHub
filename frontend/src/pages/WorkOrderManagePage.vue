@@ -88,6 +88,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { auditWorkOrder, getWorkOrderList, type AuditRequest, type WorkOrderVO } from '@/api/workOrder'
 
 const activeTab = ref('pending')
+//const activeTab = ref('')
 const loading = ref(false)
 const workOrders = ref<WorkOrderVO[]>([])
 
@@ -108,14 +109,15 @@ function materialSummary(order: WorkOrderVO) {
   return `${completeness.uploadedRequiredCount}/${completeness.requiredCount} 已上传`
 }
 
+
 async function loadWorkOrders() {
   loading.value = true
   try {
-    const page = await getWorkOrderList({
-      status: activeTab.value,
-      pageNum: 1,
-      pageSize: 50
-    })
+    const params = { pageNum: 1, pageSize: 50 }  // 注意 pageSize 改为 50
+    if (activeTab.value) {
+      params.status = activeTab.value
+    }
+    const page = await getWorkOrderList(params)
     workOrders.value = page.records || []
   } finally {
     loading.value = false

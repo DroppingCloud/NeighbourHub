@@ -9,12 +9,14 @@ import com.community.platform.dto.application.ApplicationQueryDTO;
 import com.community.platform.dto.application.ApplicationSubmitDTO;
 import com.community.platform.entity.ApplicationForm;
 import com.community.platform.entity.ApplicationMaterial;
+import com.community.platform.entity.ResidentProfile;
 import com.community.platform.entity.ServiceItem;
 import com.community.platform.entity.ServiceMaterialTemplate;
 import com.community.platform.entity.User;
 import com.community.platform.entity.WorkOrder;
 import com.community.platform.mapper.ApplicationFormMapper;
 import com.community.platform.mapper.ApplicationMaterialMapper;
+import com.community.platform.mapper.ResidentProfileMapper;
 import com.community.platform.mapper.ServiceItemMapper;
 import com.community.platform.mapper.ServiceMaterialTemplateMapper;
 import com.community.platform.mapper.UserMapper;
@@ -22,6 +24,7 @@ import com.community.platform.mapper.WorkOrderMapper;
 import com.community.platform.service.ApplicationMaterialService;
 import com.community.platform.service.ApplicationService;
 import com.community.platform.service.NoticeService;
+import com.community.platform.service.WorkOrderService;
 import com.community.platform.vo.application.ApplicationVO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -47,9 +50,13 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ServiceMaterialTemplateMapper materialTemplateMapper;
     private final WorkOrderMapper workOrderMapper;
     private final UserMapper userMapper;
+    private final ResidentProfileMapper residentProfileMapper;  // 新增，用于获取社区ID
     private final NoticeService noticeService;
     private final ApplicationMaterialService applicationMaterialService;
+    private final WorkOrderService workOrderService;  // 新增，用于工单分配和状态更新
     private final ObjectMapper objectMapper;
+
+    // ==================== 原有方法（保留并增强） ====================
 
     @Override
     @Transactional
@@ -65,10 +72,17 @@ public class ApplicationServiceImpl implements ApplicationService {
         application.setRemark(dto.getRemark());
         applicationFormMapper.insert(application);
 
+        // 创建工单并设置社区ID
         WorkOrder order = new WorkOrder();
         order.setApplicationId(application.getApplicationId());
         order.setStatus("pending");
+        // 获取社区ID：优先从申请人的居民档案获取，否则从用户获取
+        Long communityId = resolveCommunityId(application);
+        order.setCommunityId(communityId);
         workOrderMapper.insert(order);
+
+        // 自动分配工作人员
+        workOrderService.assign(order.getOrderId());
 
         noticeService.sendNotice(
                 userId,
@@ -101,6 +115,14 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (!userId.equals(application.getUserId()) && !userId.equals(application.getProxyUserId())) {
             throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
         }
+        return toApplicationVO(application, true);
+    }
+
+    /**
+     * 内部调用获取申请详情（绕过权限校验，供工单模块使用）
+     */
+    public ApplicationVO getDetailForInternal(Long applicationId) {
+        ApplicationForm application = requireApplication(applicationId);
         return toApplicationVO(application, true);
     }
 
@@ -165,6 +187,22 @@ public class ApplicationServiceImpl implements ApplicationService {
                 applicationId);
     }
 
+    // ==================== 新增私有辅助方法 ====================
+
+    /**
+     * 解析申请对应的社区ID
+     */
+    private Long resolveCommunityId(ApplicationForm application) {
+        if (application.getProfileId() != null) {
+            ResidentProfile profile = residentProfileMapper.selectById(application.getProfileId());
+            if (profile != null && profile.getCommunityId() != null) {
+                return profile.getCommunityId();
+            }
+        }
+        User user = userMapper.selectById(application.getUserId());
+        return user == null ? null : user.getCommunityId();
+    }
+
     private void restoreWorkOrder(Long applicationId) {
         WorkOrder order = workOrderMapper.selectOne(new LambdaQueryWrapper<WorkOrder>()
                 .eq(WorkOrder::getApplicationId, applicationId)
@@ -173,7 +211,14 @@ public class ApplicationServiceImpl implements ApplicationService {
             WorkOrder newOrder = new WorkOrder();
             newOrder.setApplicationId(applicationId);
             newOrder.setStatus("pending");
+            // 设置社区ID
+            ApplicationForm application = applicationFormMapper.selectById(applicationId);
+            if (application != null) {
+                newOrder.setCommunityId(resolveCommunityId(application));
+            }
             workOrderMapper.insert(newOrder);
+            // 重新分配
+            workOrderService.assign(newOrder.getOrderId());
             return;
         }
 
@@ -182,6 +227,8 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .set(WorkOrder::getStatus, "pending")
                 .set(WorkOrder::getAuditOpinion, null)
                 .set(WorkOrder::getFinishTime, null));
+        // 重新分配
+        workOrderService.assign(order.getOrderId());
     }
 
     private ServiceItem requireOnlineItem(Long itemId) {
