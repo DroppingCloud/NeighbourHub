@@ -27,4 +27,11 @@ public class BookingVO {
     private String remark;
 
     private LocalDateTime createTime;
+
+    private String staffName; 
+    private String staffPhone; 
+
+    private String feedback;
+    public String getFeedback() { return feedback; }
+    public void setFeedback(String feedback) { this.feedback = feedback; }
 }

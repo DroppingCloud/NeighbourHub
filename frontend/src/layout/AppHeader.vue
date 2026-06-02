@@ -8,6 +8,27 @@
     </div>
 
     <div class="header-right">
+      <el-dropdown v-if="isFamily && proxyStore.targets.length > 0" @command="switchProxy" class="proxy-switcher">
+        <div class="proxy-info">
+          <el-icon><User /></el-icon>
+          <span>{{ currentProxyLabel }}</span>
+          <el-icon><ArrowDown /></el-icon>
+        </div>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item :command="null">
+              <span>本人</span>
+            </el-dropdown-item>
+            <el-dropdown-item
+              v-for="target in proxyStore.targets"
+              :key="target.id"
+              :command="target"
+            >
+              <span>{{ target.name }}（{{ target.relation }}）</span>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
       <FontSizeControl />
       <NotificationBell />
 
@@ -31,29 +52,73 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { UserFilled, ArrowDown } from '@element-plus/icons-vue'
+import { UserFilled, ArrowDown, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useProxyStore } from '@/stores/proxy'
 import NotificationBell from '@/components/NotificationBell.vue'
 import FontSizeControl from '@/components/FontSizeControl.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const proxyStore = useProxyStore()
 
-function handleCommand(command: string) {
-  if (command === 'logout') {
-    authStore.logout()
-    ElMessage.success('已退出登录')
-    router.push('/login')
-  } else if (command === 'profile') {
-    router.push('/profile')
-  } else if (command === 'settings') {
-    router.push('/settings')
-  } else if (command === 'accessibility') {
-    ElMessage.info('可通过顶部字号按钮调整字体大小')
+const isFamily = computed(() => authStore.userInfo?.role === 'family')
+const currentProxyLabel = computed(() => {
+  if (!proxyStore.currentTarget) return '本人'
+  return `${proxyStore.currentTarget.name}（${proxyStore.currentTarget.relation}）`
+})
+
+function switchProxy(target: any) {
+  proxyStore.setCurrentTarget(target)
+  ElMessage.success(target ? `已切换至为 ${target.name} 代办` : '已切换至本人')
+  // 触发页面数据刷新（可以发出全局事件或由各页面自行监听 store 变化）
+  window.dispatchEvent(new CustomEvent('proxy-changed'))
+}
+
+async function handleCommand(command: string) {
+  switch (command) {
+    case 'profile':
+      router.push('/profile')
+      break
+    case 'settings':
+      router.push('/settings')
+      break
+    case 'accessibility':
+      router.push('/accessibility')
+      break
+    case 'logout':
+      try {
+        // 1. 先清除本地存储的 token（确保路由守卫立即认为未登录）
+        localStorage.removeItem('token')
+        // 如果有用户信息存储，一并清除
+        localStorage.removeItem('userInfo')
+        
+        // 2. 调用 store 的 logout（如果有后端接口，可 await）
+        await authStore.logout()
+        proxyStore.clearTarget()
+        
+        // 3. 使用 replace 跳转到登录页，避免回退
+        await router.replace('/login')
+        ElMessage.success('已退出登录')
+      } catch (error) {
+        console.error('退出失败', error)
+        // 即使出错也强制跳转
+        window.location.href = '/login'
+      }
+      break
+    default:
+      break
   }
 }
+
+onMounted(() => {
+  if (isFamily.value) {
+    proxyStore.restoreTarget()
+  }
+})
 </script>
 
 <style scoped>
@@ -140,6 +205,20 @@ function handleCommand(command: string) {
   font-size: 0.875rem;
   color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.proxy-switcher {
+  margin-right: 0.5rem;
+  cursor: pointer;
+}
+.proxy-info {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: 2rem;
+  font-size: 0.875rem;
 }
 
 @media (max-width: 48rem) {

@@ -31,6 +31,10 @@
             <span>{{ booking.remark || '无' }}</span>
           </div>
         </div>
+        <div v-if="booking.staffName">
+          <span class="label">服务人员：</span>
+          <span>{{ booking.staffName }} ({{ booking.staffPhone }})</span>
+        </div>
 
         <div class="card-footer">
           <el-button

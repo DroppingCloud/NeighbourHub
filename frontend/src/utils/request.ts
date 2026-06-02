@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 import { useAuthStore } from '@/stores/auth'
+import { useProxyStore } from '@/stores/proxy'
 
 const request = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
@@ -14,10 +15,26 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // 家属代办：如果当前有代办目标，自动添加 _proxyFor 参数
+    const proxyStore = useProxyStore()
+    if (proxyStore.currentTarget) {
+      // 添加到 URL 参数中（GET 请求）或请求体（POST/PUT）
+      if (config.method === 'get') {
+        config.params = { ...config.params, _proxyFor: proxyStore.currentTarget.profileId }
+      } else {
+        // 对于 POST/PUT 等，添加到 data 中（后端需要从请求体解析）
+        if (config.data && typeof config.data === 'object') {
+          config.data._proxyFor = proxyStore.currentTarget.profileId
+        } else {
+          config.data = { _proxyFor: proxyStore.currentTarget.profileId }
+        }
+      }
+    }
     return config
   },
   (error) => Promise.reject(error)
 )
+
 
 function clearLoginAndRedirect(message: string) {
   const authStore = useAuthStore()

@@ -5,11 +5,17 @@
       <p>管理家属代办授权关系</p>
     </div>
 
+    <!-- 显示当前代办状态 -->
+    <div v-if="proxyStore.currentTarget" class="current-proxy-banner">
+      <span>当前正在为 <strong>{{ proxyStore.currentTarget.name }}</strong> 代办事务</span>
+      <el-button size="small" @click="exitProxy">退出代办</el-button>
+    </div>
+
     <div class="binding-list">
       <div v-for="binding in familyBindings" :key="binding.id" class="binding-card">
         <div class="binding-info">
           <div class="resident-name">
-            {{ binding.targetUserId ? `用户 ${binding.targetUserId}` : `档案 ${binding.targetProfileId}` }}
+            {{ binding.targetProfileName || `用户 ${binding.targetProfileId}` }}
           </div>
           <div class="binding-detail">
             <el-tag size="small">{{ binding.relation || '亲属' }}</el-tag>
@@ -19,14 +25,21 @@
             <span class="bind-time">授权范围：{{ binding.authorizedActions || 'application,booking,notice' }}</span>
           </div>
         </div>
-        <el-button
-          v-if="binding.status === 'active'"
-          type="danger"
-          link
-          @click="revoke(binding.id)"
-        >
-          撤销
-        </el-button>
+        <div class="card-actions">
+          <!-- 切换按钮（仅对已生效的绑定显示） -->
+          <el-button v-if="binding.status === 'active'" type="primary" link @click="switchToProxy(binding)">
+            切换
+          </el-button>
+          <!-- 撤销/解绑按钮 -->
+          <el-button
+            v-if="binding.status === 'active'"
+            type="danger"
+            link
+            @click="revoke(binding.id)"
+          >
+            解绑
+          </el-button>
+        </div>
       </div>
       <el-empty v-if="!loading && familyBindings.length === 0" description="暂无家属代办关系" />
     </div>
@@ -38,13 +51,17 @@
       </el-button>
     </div>
 
+    <!-- 添加绑定对话框（保持不变） -->
     <el-dialog v-model="showAddDialog" title="添加家属绑定" width="500px">
-      <el-form :model="newBinding" label-width="7rem" label-position="right">
-        <el-form-item label="被代理用户ID">
-          <el-input-number v-model="newBinding.targetUserId" :min="1" style="width: 100%" />
+      <el-form :model="newBinding" label-width="7rem">
+        <el-form-item label="真实姓名" required>
+          <el-input v-model="newBinding.realName" placeholder="被代理人的姓名" />
+        </el-form-item>
+        <el-form-item label="身份证号" required>
+          <el-input v-model="newBinding.idCard" placeholder="被代理人的身份证号" />
         </el-form-item>
         <el-form-item label="亲属关系">
-          <el-select v-model="newBinding.relation" placeholder="请选择" style="width: 100%">
+          <el-select v-model="newBinding.relation">
             <el-option label="子女" value="子女" />
             <el-option label="配偶" value="配偶" />
             <el-option label="父母" value="父母" />
@@ -58,7 +75,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="addBinding">提交</el-button>
+        <el-button type="primary" :loading="submitting" @click="addBinding">提交申请</el-button>
       </template>
     </el-dialog>
   </div>
@@ -68,12 +85,17 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import {
   bindProxy,
   getProxyRelations,
   revokeProxyRelation,
   type ProxyRelationVO
 } from '@/api/user'
+import { useProxyStore } from '@/stores/proxy'
+
+const router = useRouter()
+const proxyStore = useProxyStore()
 
 const familyBindings = ref<ProxyRelationVO[]>([])
 const loading = ref(false)
@@ -81,7 +103,8 @@ const submitting = ref(false)
 const showAddDialog = ref(false)
 
 const newBinding = ref({
-  targetUserId: 3,
+  realName: '',
+  idCard: '',
   relation: '子女',
   authorizedActions: 'application,booking,notice'
 })
@@ -100,20 +123,31 @@ async function loadBindings() {
   loading.value = true
   try {
     familyBindings.value = await getProxyRelations()
+    // 同步更新 proxyStore 中的 targets 列表
+    const activeBindings = familyBindings.value.filter(b => b.status === 'active')
+    proxyStore.targets.value = activeBindings.map(b => ({
+      id: b.id,
+      profileId: b.targetProfileId!,
+      name: b.targetProfileName || `用户 ${b.targetProfileId}`,
+      relation: b.relation || '家属',
+      authorizedActions: b.authorizedActions || ''
+    }))
   } finally {
     loading.value = false
   }
 }
 
+import { applyProxy } from '@/api/user'  // 替换 bindProxy
+
 async function addBinding() {
-  if (!newBinding.value.targetUserId || !newBinding.value.relation) {
-    ElMessage.warning('请填写被代理用户ID和亲属关系')
+  if (!newBinding.value.realName || !newBinding.value.idCard) {
+    ElMessage.warning('请填写完整信息')
     return
   }
   submitting.value = true
   try {
-    await bindProxy(newBinding.value)
-    ElMessage.success('家属绑定已创建')
+    await applyProxy(newBinding.value)   // 调用申请接口
+    ElMessage.success('绑定申请已提交，等待对方确认')
     showAddDialog.value = false
     await loadBindings()
   } finally {
@@ -122,12 +156,31 @@ async function addBinding() {
 }
 
 async function revoke(id: number) {
-  await ElMessageBox.confirm('确定撤销该家属代办授权吗？', '确认撤销', {
+  await ElMessageBox.confirm('确定解绑该家属代办授权吗？', '确认解绑', {
     type: 'warning'
   })
   await revokeProxyRelation(id)
-  ElMessage.success('已撤销授权')
+  ElMessage.success('已解绑')
   await loadBindings()
+}
+
+async function switchToProxy(binding: ProxyRelationVO) {
+  const target = {
+    id: binding.id,
+    profileId: binding.targetProfileId!,
+    name: binding.targetProfileName || `用户 ${binding.targetProfileId}`,
+    relation: binding.relation || '家属',
+    authorizedActions: binding.authorizedActions || ''
+  }
+  proxyStore.setCurrentTarget(target)
+  ElMessage.success(`已切换至为 ${target.name} 代办`)
+  // 可选：跳转到首页，让用户开始代办
+  router.push('/')
+}
+
+function exitProxy() {
+  proxyStore.setCurrentTarget(null)
+  ElMessage.success('已退出代办模式，当前为本人办理')
 }
 
 onMounted(loadBindings)
@@ -138,28 +191,24 @@ onMounted(loadBindings)
   max-width: 50rem;
   margin: 0 auto;
 }
-
 .page-header {
   margin-bottom: 1.5rem;
 }
-
-.page-header h2 {
-  font-size: 1.5rem;
-  color: var(--text-primary);
-  margin-bottom: 0.5rem;
+.current-proxy-banner {
+  background: var(--bg-tertiary);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
-
-.page-header p {
-  color: var(--text-muted);
-}
-
 .binding-list {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
-
 .binding-card {
   background: var(--card-bg);
   border-radius: var(--radius-md);
@@ -170,26 +219,25 @@ onMounted(loadBindings)
   gap: 1rem;
   box-shadow: var(--shadow-sm);
 }
-
+.binding-info {
+  flex: 1;
+}
 .resident-name {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 0.375rem;
   color: var(--text-primary);
 }
-
 .binding-detail {
   display: flex;
   gap: 0.75rem;
   align-items: center;
   flex-wrap: wrap;
 }
-
-.bind-time {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
 }
-
 .add-binding {
   text-align: center;
   padding: 1.25rem;

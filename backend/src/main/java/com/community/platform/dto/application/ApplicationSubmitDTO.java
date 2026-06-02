@@ -21,4 +21,6 @@ public class ApplicationSubmitDTO {
     private Map<String, Object> formData;
 
     private String remark;
+
+    private Long proxyFor;  // 被代理人档案ID，可选
 }

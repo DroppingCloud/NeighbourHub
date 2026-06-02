@@ -9,6 +9,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
+import com.community.platform.dto.proxy.ProxyApplyDTO;
+
 
 import java.util.List;
 
@@ -38,4 +41,33 @@ public class ProxyRelationController {
         proxyRelationService.revoke(userId, id);
         return Result.success();
     }
+
+    @Operation(summary = "家属发起绑定申请")
+    @PostMapping("/apply")
+    public Result<Long> apply(@AuthenticationPrincipal Long userId,
+                          @Valid @RequestBody ProxyApplyDTO dto) {
+        return Result.success(proxyRelationService.apply(userId, dto));
+    }
+
+    @Operation(summary = "获取待确认的绑定请求（作为被代理人）")
+    @GetMapping("/pending-requests")
+    public Result<List<ProxyRelation>> getPendingRequests(@AuthenticationPrincipal Long userId) {
+        return Result.success(proxyRelationService.getPendingRequests(userId));
+    }
+
+    @Operation(summary = "确认绑定申请")
+    @PutMapping("/{id}/confirm")
+    public Result<Void> confirm(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
+        proxyRelationService.confirm(userId, id);
+        return Result.success();
+    }
+
+    @Operation(summary = "拒绝绑定申请")
+    @PutMapping("/{id}/reject")
+    public Result<Void> reject(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
+        proxyRelationService.reject(userId, id);
+        return Result.success();
+    }
 }
+
+

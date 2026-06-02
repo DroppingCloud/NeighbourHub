@@ -21,4 +21,16 @@ public class BookingDTO {
     private String address;
 
     private String remark;
+
+    /**
+     * 居民档案ID（可选，若为空则默认使用当前登录用户关联的档案）
+     */
+    private Long profileId;
+
+    /**
+     * 代办人用户ID（可选，家属代预约时使用）
+     */
+    private Long proxyUserId;
+
+    private Long proxyFor;
 }

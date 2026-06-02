@@ -111,6 +111,7 @@ import { Tickets, Loading, Calendar, Check, Position, Bell, Setting } from '@ele
 import { useAuthStore } from '@/stores/auth'
 import { getWorkOrderList, auditWorkOrder, type WorkOrderVO } from '@/api/workOrder'
 import { assignBooking, getBookingList, type BookingVO } from '@/api/booking'
+import { getStaffBookingList } from '@/api/booking'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -119,6 +120,11 @@ const userInfo = computed(() => authStore.userInfo)
 const workOrders = ref<WorkOrderVO[]>([])
 const bookings = ref<BookingVO[]>([])
 const loading = ref(false)
+
+const pendingCount = ref(0)
+const confirmedCount = ref(0)
+const inProgressCount = ref(0)
+const completedCount = ref(0)
 
 const pendingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').length)
 const processingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'processing').length)
@@ -132,17 +138,11 @@ onMounted(() => {
 })
 
 async function loadWorkbench() {
-  loading.value = true
-  try {
-    const [orderPage, bookingPage] = await Promise.all([
-      getWorkOrderList({ pageNum: 1, pageSize: 50 }),
-      getBookingList(1, 50)
-    ])
-    workOrders.value = getPageRows<WorkOrderVO>(orderPage)
-    bookings.value = getPageRows<BookingVO>(bookingPage)
-  } finally {
-    loading.value = false
-  }
+  const page = await getStaffBookingList(1, 100);
+  const all = page.records || [];
+  pendingCount.value = all.filter(b => b.status === 'pending').length;
+  confirmedCount.value = all.filter(b => b.status === 'confirmed').length;
+  completedCount.value = all.filter(b => b.status === 'completed').length;
 }
 
 function getPageRows<T>(page: any): T[] {

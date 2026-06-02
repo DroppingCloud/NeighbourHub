@@ -57,4 +57,6 @@ public class ServiceBooking {
 
     @TableLogic
     private Integer deleted;
+
+    private Long communityId;
 }

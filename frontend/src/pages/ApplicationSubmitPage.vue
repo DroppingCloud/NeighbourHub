@@ -280,6 +280,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormRules } from 'element-plus'
 import { Document, InfoFilled, Check, House, OfficeBuilding, School } from '@element-plus/icons-vue'
 import { getPublicMaterialTemplates, getPublicServiceItemList } from '@/api/serviceItem'
+import { useProxyStore } from '@/stores/proxy'
 import {
   isIdentityDocumentMaterial,
   resolveBuiltInMaterialTemplate,
@@ -296,6 +297,7 @@ const loading = ref(false)
 const formRef = ref()
 const materialDialogVisible = ref(false)
 const activeMaterial = ref<any>(null)
+const proxyStore = useProxyStore()
 
 const applyForm = ref({
   name: '',
@@ -823,6 +825,16 @@ async function nextStep() {
   } finally {
     nextLoading.value = false
   }
+}
+
+async function handleSubmit() {
+  const submitData = {
+    itemId: selectedItemId,
+    formData: form.value,
+    proxyUserId: proxyStore.currentTarget?.profileId || null,
+    remark: remark.value
+  }
+  await submitApplication(submitData)
 }
 
 watch(residencePermitCondition, () => {

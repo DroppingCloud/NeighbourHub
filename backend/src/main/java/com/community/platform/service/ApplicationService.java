@@ -7,7 +7,7 @@ import com.community.platform.vo.application.ApplicationVO;
 
 public interface ApplicationService {
     Long submit(Long userId, ApplicationSubmitDTO dto);
-    Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query);
+    Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query,Long proxyFor);
     ApplicationVO getDetail(Long userId, Long applicationId);
     ApplicationVO getDetailForInternal(Long applicationId);
     void resubmit(Long userId, Long applicationId, ApplicationSubmitDTO dto);

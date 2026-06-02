@@ -18,6 +18,13 @@ export interface ProxyRelationVO extends ProxyBindRequest {
   updateTime: string
 }
 
+export interface ProxyApplyRequest {
+  realName: string
+  idCard: string
+  relation: string
+  authorizedActions?: string
+}
+
 export const getCurrentUserInfo = () => getMe()
 
 export const bindProxy = (data: ProxyBindRequest) =>
@@ -33,3 +40,15 @@ export const getUsersByRole = (role?: string, pageNum = 1, pageSize = 10) =>
   request.get<any, any>('/api/admin/user/list', {
     params: { role: role || undefined, pageNum, pageSize }
   })
+
+export const applyProxy = (data: ProxyApplyRequest) =>
+  request.post<any, number>('/api/proxy/apply', data)
+
+export const getPendingRequests = () =>
+  request.get<any, ProxyRelationVO[]>('/api/proxy/pending-requests')
+
+export const confirmProxy = (id: number) =>
+  request.put<any, void>(`/api/proxy/${id}/confirm`)
+
+export const rejectProxy = (id: number) =>
+  request.put<any, void>(`/api/proxy/${id}/reject`)

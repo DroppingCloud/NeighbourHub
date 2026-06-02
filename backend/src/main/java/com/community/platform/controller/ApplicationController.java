@@ -42,18 +42,19 @@ public class ApplicationController {
     private final ApplicationService applicationService;
     private final ApplicationMaterialService applicationMaterialService;
 
-    @Operation(summary = "提交申请")
     @PostMapping("/submit")
     public Result<Long> submit(@AuthenticationPrincipal Long userId,
-                               @Valid @RequestBody ApplicationSubmitDTO dto) {
+                               @Valid @RequestBody ApplicationSubmitDTO dto,
+                               @RequestParam(value = "_proxyFor", required = false) Long proxyFor) {
+        dto.setProxyFor(proxyFor);
         return Result.success(applicationService.submit(userId, dto));
     }
 
-    @Operation(summary = "申请列表")
     @GetMapping("/list")
     public Result<Page<ApplicationVO>> list(@AuthenticationPrincipal Long userId,
-                                            ApplicationQueryDTO query) {
-        return Result.success(applicationService.getList(userId, query));
+                                            ApplicationQueryDTO query,
+                                            @RequestParam(value = "_proxyFor", required = false) Long proxyFor) {
+        return Result.success(applicationService.getList(userId, query, proxyFor));
     }
 
     @Operation(summary = "申请详情")

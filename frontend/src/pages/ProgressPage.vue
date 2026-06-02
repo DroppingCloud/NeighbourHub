@@ -80,15 +80,26 @@ import { onMounted, ref } from 'vue'
 import { Check } from '@element-plus/icons-vue'
 import { getApplicationList, type ApplicationVO } from '@/api/application'
 import { getBookingList, type BookingVO } from '@/api/booking'
+import { watch } from 'vue'
+import { useProxyStore } from '@/stores/proxy'
 
 const activeTab = ref('application')
 const applications = ref<ApplicationVO[]>([])
 const bookings = ref<BookingVO[]>([])
 const loadingApplications = ref(false)
 const loadingBookings = ref(false)
+const proxyStore = useProxyStore()
 
 const stepTitles = ['提交申请', '审核中', '办理中', '已完成']
 const bookingStepTitles = ['提交预约', '调度中', '服务中', '已完成']
+
+watch(() => proxyStore.currentTarget, () => {
+  loadProgress()
+}, { deep: true })
+
+window.addEventListener('proxy-changed', () => {
+  loadProgress()
+})
 
 onMounted(() => {
   loadProgress()

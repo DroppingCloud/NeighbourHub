@@ -34,8 +34,18 @@ export const cancelBooking = (id: number) =>
 export const assignBooking = (id: number, staffUserId: number) =>
   request.put<any, void>(`/api/booking/${id}/assign`, { staffUserId })
 
+export function startBooking(bookingId: number) {
+    return request.put(`/api/booking/${bookingId}/start`); }
+
 export const completeBooking = (id: number, feedback?: string) =>
   request.put<any, void>(`/api/booking/${id}/complete`, { feedback })
 
 export const submitBookingFeedback = (id: number, feedback: string) =>
   request.post<any, void>(`/api/booking/${id}/feedback`, { feedback })
+
+export function getStaffBookingList(pageNum: number, pageSize: number, status?: string) {
+  const params: any = { pageNum, pageSize }
+  if (status) params.status = status
+  return request.get('/api/booking/staff/list', { params })
+}
+

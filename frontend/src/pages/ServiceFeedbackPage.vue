@@ -113,6 +113,52 @@ function toggleTag(tag: string) {
   }
 }
 
+/**
+ * 解析已保存的评价字符串，还原评分、标签、详细内容
+ * 格式示例: "5星 【态度热情、响应及时】 服务很好"
+ * 或 "4星 专业规范 还不错" (无括号)
+ * 或 "3星  【】 一般般" (无标签)
+ */
+function parseFeedback(feedbackStr: string): { rating: number; tags: string[]; content: string } {
+  // 默认值
+  let rating = 0
+  let tags: string[] = []
+  let content = ''
+
+  if (!feedbackStr) return { rating, tags, content }
+
+  // 匹配开头的数字星，例如 "5星"
+  const ratingMatch = feedbackStr.match(/^(\d+)星/)
+  if (ratingMatch) {
+    rating = parseInt(ratingMatch[1], 10)
+  }
+
+  // 提取标签部分：可能为 "【标签1、标签2】" 或没有括号
+  let remaining = feedbackStr.replace(/^\d+星\s*/, '')
+  const bracketMatch = remaining.match(/^【(.*?)】/)
+  if (bracketMatch) {
+    const tagStr = bracketMatch[1]
+    if (tagStr) {
+      tags = tagStr.split(/[、,，]/).map(t => t.trim()).filter(t => t)
+    }
+    remaining = remaining.substring(bracketMatch[0].length)
+  } else {
+    // 没有括号，尝试匹配第一个空格前的部分作为标签（可选）
+    // 但为了避免误判，只有当剩余字符串开头是标签列表中的词时才提取
+    const firstSpaceIdx = remaining.indexOf(' ')
+    if (firstSpaceIdx > 0) {
+      const possibleTag = remaining.substring(0, firstSpaceIdx)
+      if (serviceTags.includes(possibleTag)) {
+        tags = [possibleTag]
+        remaining = remaining.substring(firstSpaceIdx + 1)
+      }
+    }
+  }
+
+  content = remaining.trim()
+  return { rating, tags, content }
+}
+
 async function loadBooking() {
   const id = Number(route.query.bookingId)
   if (!id) {
@@ -120,7 +166,26 @@ async function loadBooking() {
     router.push('/booking/list')
     return
   }
-  booking.value = await getBookingDetail(id)
+  try {
+    const detail = await getBookingDetail(id)
+    booking.value = detail
+
+    // 如果已有评价内容，解析并回填表单
+    if (detail.feedback) {
+      const parsed = parseFeedback(detail.feedback)
+      rating.value = parsed.rating
+      selectedTags.value = parsed.tags
+      feedbackContent.value = parsed.content
+    } else {
+      // 无历史评价时重置表单（可选）
+      rating.value = 0
+      selectedTags.value = []
+      feedbackContent.value = ''
+    }
+  } catch (error) {
+    ElMessage.error('加载预约信息失败')
+    router.push('/booking/list')
+  }
 }
 
 async function submitFeedback() {
@@ -137,6 +202,8 @@ async function submitFeedback() {
     await submitBookingFeedback(booking.value.bookingId, fullFeedback)
     ElMessage.success('评价提交成功')
     router.push('/booking/list')
+  } catch (error) {
+    ElMessage.error('提交失败，请重试')
   } finally {
     submitting.value = false
   }
@@ -146,6 +213,7 @@ onMounted(loadBooking)
 </script>
 
 <style scoped>
+/* 原有样式保持不变 */
 .feedback-container {
   max-width: 56.25rem;
   margin: 0 auto;

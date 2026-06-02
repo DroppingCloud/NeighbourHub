@@ -84,6 +84,13 @@ public class ApplicationServiceImpl implements ApplicationService {
         // 自动分配工作人员
         workOrderService.assign(order.getOrderId());
 
+        if (dto.getProxyFor() != null) {
+            application.setProxyUserId(dto.getProxyFor());  // 被代理人
+        } else {
+            application.setProxyUserId(null);
+        }
+        application.setUserId(userId);  // 当前操作人（家属或本人）
+
         noticeService.sendNotice(
                 userId,
                 "申请已提交",
@@ -95,15 +102,23 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
-    public Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query) {
-        LambdaQueryWrapper<ApplicationForm> wrapper = new LambdaQueryWrapper<ApplicationForm>()
-                .eq(ApplicationForm::getUserId, userId)
-                .eq(StringUtils.hasText(query.getStatus()), ApplicationForm::getStatus, query.getStatus())
-                .eq(query.getItemId() != null, ApplicationForm::getItemId, query.getItemId())
-                .orderByDesc(ApplicationForm::getSubmitTime);
+    public Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query, Long proxyFor) {
+        LambdaQueryWrapper<ApplicationForm> wrapper = new LambdaQueryWrapper<>();
+        if (proxyFor != null) {
+            wrapper.eq(ApplicationForm::getProxyUserId, proxyFor);
+        } else {
+            wrapper.and(w -> w.eq(ApplicationForm::getUserId, userId)
+                             .or().eq(ApplicationForm::getProxyUserId, userId));
+        }
+        if (StringUtils.hasText(query.getStatus())) {
+            wrapper.eq(ApplicationForm::getStatus, query.getStatus());
+        }
+        if (query.getItemId() != null) {
+            wrapper.eq(ApplicationForm::getItemId, query.getItemId());
+        }
+        wrapper.orderByDesc(ApplicationForm::getSubmitTime);
         Page<ApplicationForm> page = applicationFormMapper.selectPage(
                 new Page<>(page(query.getPageNum()), size(query.getPageSize())), wrapper);
-
         Page<ApplicationVO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         result.setRecords(page.getRecords().stream().map(application -> toApplicationVO(application, false)).toList());
         return result;
