@@ -87,7 +87,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
-  bindProxy,
+  applyProxy,
   getProxyRelations,
   revokeProxyRelation,
   type ProxyRelationVO
@@ -125,7 +125,7 @@ async function loadBindings() {
     familyBindings.value = await getProxyRelations()
     // 同步更新 proxyStore 中的 targets 列表
     const activeBindings = familyBindings.value.filter(b => b.status === 'active')
-    proxyStore.targets.value = activeBindings.map(b => ({
+    proxyStore.targets = activeBindings.map(b => ({
       id: b.id,
       profileId: b.targetProfileId!,
       name: b.targetProfileName || `用户 ${b.targetProfileId}`,
@@ -136,8 +136,6 @@ async function loadBindings() {
     loading.value = false
   }
 }
-
-import { applyProxy } from '@/api/user'  // 替换 bindProxy
 
 async function addBinding() {
   if (!newBinding.value.realName || !newBinding.value.idCard) {

@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -239,10 +239,12 @@ import {
   getApplicationMaterialFileUrl,
   resubmitApplication,
   submitApplication,
+  cleanupFailedDraftApplication,
   checkApplicationMaterialCompleteness,
   uploadApplicationMaterialFile,
-  precheckApplicationMaterial
+  runAiPrecheckApplicationMaterial
 } from '@/api/application'
+import { getPublicMaterialTemplates } from '@/api/serviceItem'
 import {
   isIdentityDocumentMaterial,
   resolveBuiltInMaterialTemplate,
@@ -317,6 +319,7 @@ const formData = ref({
 const serviceName = ref('')
 const serviceId = ref('')
 const serviceCategory = ref('')
+const proxyUserId = ref<number | null>(null)
 
 function emptyFormData() {
   return {
@@ -584,9 +587,10 @@ function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
-function triggerUpload(index: number) {
+async function triggerUpload(index: number) {
   if (materials.value[index]?.uploading) return
   currentMaterialIndex.value = index
+  await nextTick()
   fileInputRef.value?.click()
 }
 
@@ -671,11 +675,12 @@ async function runPrecheck(file: File, material: MaterialItem) {
     suggestions.push('请按材料模板要求转换为规定格式后重新上传')
   }
 
+  const minUsefulBytes = getMinUsefulFileSize(extension)
   if (file.size === 0) {
     issues.push('文件为空，无法用于审核')
     suggestions.push('请重新导出或重新扫描后上传')
-  } else if (file.size < 10 * 1024) {
-    issues.push('文件过小，可能为空白文件、损坏文件或页数不完整')
+  } else if (file.size < minUsefulBytes) {
+    issues.push(getSmallFileIssue(extension))
     suggestions.push('请确认文件内容完整后重新上传')
   }
 
@@ -686,9 +691,11 @@ async function runPrecheck(file: File, material: MaterialItem) {
 
   if (['jpg', 'jpeg', 'png'].includes(extension)) {
     const imageIssues = await checkImageQuality(file)
-    issues.push(...imageIssues)
+    const fatalImageIssues = imageIssues.filter(issue => issue.includes('无法正常读取'))
+    issues.push(...fatalImageIssues)
     if (imageIssues.length) {
       suggestions.push('请使用清晰、无遮挡、光线充足的原件照片')
+      suggestions.push(...imageIssues)
     }
   }
 
@@ -710,7 +717,7 @@ async function runPrecheck(file: File, material: MaterialItem) {
     suggestions.push('建议文件名包含银行卡或账户关键字，便于工作人员快速识别')
   }
 
-  if (/合同|证书|营业执照|劳动|学生证|高龄津贴申请表|证明|说明/.test(material.name) && !['doc', 'docx', 'pdf'].includes(extension)) {
+  if (requiresTemplateDocument(material) && !['doc', 'docx', 'pdf'].includes(extension)) {
     issues.push('该材料应使用系统模板填写后上传 DOC/DOCX/PDF 文件')
     suggestions.push('请先点击“下载模板”，填写完成并签字后再上传')
   }
@@ -730,7 +737,7 @@ async function runPrecheck(file: File, material: MaterialItem) {
     issues,
     suggestions: Array.from(new Set(suggestions)),
     remark: passed
-      ? '格式、大小和基础质量检查通过；OCR 内容核验待后续服务扩展'
+      ? '格式、大小和基础质量检查通过；提交时将调用后端OCR/AI预审'
       : issues.join('；')
   }
 }
@@ -787,6 +794,41 @@ function requiresSignature(material: MaterialItem) {
   return /授权|承诺|申请表|签字|签章/.test(`${material.name}${material.description}`)
 }
 
+function getMinUsefulFileSize(extension: string) {
+  if (['doc', 'docx'].includes(extension)) {
+    return 512
+  }
+  if (extension === 'pdf') {
+    return 1024
+  }
+  if (['jpg', 'jpeg', 'png'].includes(extension)) {
+    return 1024
+  }
+  return 1024
+}
+
+function getSmallFileIssue(extension: string) {
+  if (['doc', 'docx'].includes(extension)) {
+    return 'Word 文件内容过少，可能未填写或保存异常'
+  }
+  if (extension === 'pdf') {
+    return 'PDF 文件过小，可能为空白文件、损坏文件或页数不完整'
+  }
+  if (['jpg', 'jpeg', 'png'].includes(extension)) {
+    return '图片文件过小，可能为空白图片或保存异常'
+  }
+  return '文件过小，可能为空白文件或损坏文件'
+}
+
+function requiresTemplateDocument(material: MaterialItem) {
+  const text = `${material.name}${material.description}`
+  if (material.noTemplateRequired) return false
+  if (/照片|相片|身份证|户口簿|居住证|学生证|残疾证|营业执照|合同|证书|银行卡/.test(text)) {
+    return false
+  }
+  return /申请表|授权书|承诺书|声明书|说明/.test(text)
+}
+
 function removeFile(index: number) {
   const material = materials.value[index]
   material.uploaded = false
@@ -809,16 +851,30 @@ function reUpload(index: number) {
 
 async function previewFile(index: number) {
   const material = materials.value[index]
-  if (material.fileUrl) {
+  if (!material.fileUrl) return
+
+  const previewWindow = window.open('', '_blank')
+  if (!previewWindow) {
+    ElMessage.error('材料预览窗口被浏览器拦截，请允许弹窗后重试')
+    return
+  }
+
+  try {
     if (material.fileUrl.startsWith('/api/')) {
       const blob = await fetchMaterialBlob(material)
-      if (!blob) return
+      if (!blob) {
+        previewWindow.close()
+        return
+      }
       const url = URL.createObjectURL(blob)
-      window.open(url, '_blank')
-      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      previewWindow.location.href = url
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
       return
     }
-    window.open(material.fileUrl, '_blank')
+    previewWindow.location.href = material.fileUrl
+  } catch (error) {
+    previewWindow.close()
+    ElMessage.error('材料预览失败，请尝试下载后查看')
   }
 }
 
@@ -841,16 +897,21 @@ async function downloadFile(index: number) {
 
 async function fetchMaterialBlob(material: MaterialItem) {
   const token = localStorage.getItem('token')
-  const response = await fetch(material.fileUrl, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {}
-  })
-  if (!response.ok) {
-    ElMessage.error('材料文件读取失败')
+  try {
+    const response = await fetch(material.fileUrl, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    if (!response.ok) {
+      ElMessage.error(response.status === 401 ? '登录已过期，请重新登录后预览材料' : '材料文件读取失败')
+      return null
+    }
+    const blob = await response.blob()
+    const contentType = response.headers.get('content-type') || inferMimeType(material.fileName)
+    return blob.type === contentType ? blob : new Blob([blob], { type: contentType })
+  } catch {
+    ElMessage.error('材料文件读取失败，请检查后端服务是否正常')
     return null
   }
-  const blob = await response.blob()
-  const contentType = response.headers.get('content-type') || inferMimeType(material.fileName)
-  return blob.type === contentType ? blob : new Blob([blob], { type: contentType })
 }
 
 function saveBlob(blob: Blob, fileName: string) {
@@ -905,11 +966,17 @@ function downloadTemplate(material: MaterialItem) {
   }
 
   const html = material.templateHtml || buildTemplateHtml(material)
+  const templateFileName = normalizeGeneratedTemplateFileName(material)
   const link = document.createElement('a')
   link.href = URL.createObjectURL(new Blob([html], { type: 'application/msword;charset=utf-8' }))
-  link.download = material.templateName || `${material.name}模板.doc`
+  link.download = templateFileName
   link.click()
   URL.revokeObjectURL(link.href)
+}
+
+function normalizeGeneratedTemplateFileName(material: MaterialItem) {
+  const rawName = material.templateName || `${material.name}模板.doc`
+  return rawName.replace(/\.docx$/i, '.doc').replace(/\.pdf$/i, '.doc')
 }
 
 function buildTemplateHtml(material: MaterialItem) {
@@ -961,14 +1028,19 @@ async function submitMaterials() {
   }
   
   submitting.value = true
+  let createdApplicationId: number | null = null
   try {
     const applicationId = isSupplementMode.value
       ? Number(supplementApplicationId.value)
-      : await submitApplication({
+        : await submitApplication({
           itemId: Number(serviceId.value),
+          proxyUserId: proxyUserId.value || undefined,
           formData: formData.value,
           remark: `${serviceName.value || '事项'}申请`
         })
+    if (!isSupplementMode.value) {
+      createdApplicationId = applicationId
+    }
 
     for (const material of materials.value) {
       if (!material.uploaded) {
@@ -985,14 +1057,27 @@ async function submitMaterials() {
         materialName: material.name,
         file: material.file
       })
-      await precheckApplicationMaterial(materialId, {
-        precheckStatus: material.precheckStatus === 'passed' ? 'passed' : 'failed',
-        precheckRemark: material.precheckRemark || (material.precheckStatus === 'passed' ? '规则预审通过' : '规则预审未通过')
-      })
+      const aiResult = await runAiPrecheckApplicationMaterial(materialId)
+      material.materialId = materialId
+      material.fileUrl = getApplicationMaterialFileUrl(materialId)
+      material.precheckStatus = aiResult.precheckStatus === 'passed' ? 'passed' : 'failed'
+      material.precheckRemark = aiResult.precheckRemark || material.precheckRemark
+      material.issues = aiResult.precheckStatus === 'failed'
+        ? [aiResult.precheckRemark || 'OCR/AI预审未通过，请重新上传清晰完整的材料']
+        : []
+      material.suggestions = aiResult.precheckStatus === 'failed'
+        ? ['请根据OCR/AI预审提示重新上传材料']
+        : []
+      if (material.precheckStatus === 'failed') {
+        await cleanupCreatedApplication(createdApplicationId)
+        ElMessage.warning(`${material.name} OCR/AI预审未通过`)
+        return
+      }
     }
 
     const completeness = await checkApplicationMaterialCompleteness(applicationId)
     if (!completeness.complete) {
+      await cleanupCreatedApplication(createdApplicationId)
       ElMessage.warning(`材料不完整，缺少：${completeness.missingMaterialNames.join('、')}`)
       return
     }
@@ -1012,8 +1097,22 @@ async function submitMaterials() {
       ? (existingApplicationMode.value === 'resubmit' ? '申请已重新提交' : '补件材料已重新提交')
       : '申请和材料已提交')
     router.push('/application/list')
+  } catch (error) {
+    await cleanupCreatedApplication(createdApplicationId)
+    throw error
   } finally {
     submitting.value = false
+  }
+}
+
+async function cleanupCreatedApplication(applicationId: number | null) {
+  if (!applicationId || isSupplementMode.value) {
+    return
+  }
+  try {
+    await cleanupFailedDraftApplication(applicationId)
+  } catch {
+    // 清理失败时不打断用户当前修正材料的操作，后端权限和状态会兜底。
   }
 }
 
@@ -1021,7 +1120,7 @@ function goBack() {
   router.back()
 }
 
-function loadTempData() {
+async function loadTempData() {
   const applicationId = Number(route.query.applicationId)
   const mode = String(route.query.mode || '')
   if ((mode === 'supplement' || mode === 'resubmit') && applicationId) {
@@ -1036,9 +1135,12 @@ function loadTempData() {
     serviceId.value = data.serviceId
     serviceName.value = data.serviceName
     serviceCategory.value = data.serviceCategory || ''
+    proxyUserId.value = data.proxyUserId || null
     formData.value = data.formData
     if (Array.isArray(data.serviceMaterials) && data.serviceMaterials.length > 0) {
-      materials.value = data.serviceMaterials.map((material: any, index: number) =>
+      const templates = await getPublicMaterialTemplates(Number(data.serviceId)).catch(() => [])
+      const serviceMaterials = withTemplateIds(data.serviceMaterials, templates)
+      materials.value = serviceMaterials.map((material: any, index: number) =>
         createMaterialItem(material, index)
       )
     }
@@ -1262,6 +1364,31 @@ function materialTemplate(materialName: string, materialType: string, descriptio
   }
 }
 
+function withTemplateIds(materials: any[], templates: any[]) {
+  const templateByType = new Map<string, any>()
+  const templateByName = new Map<string, any>()
+  for (const template of templates || []) {
+    if (template.materialType) {
+      templateByType.set(template.materialType, template)
+    }
+    if (template.materialName) {
+      templateByName.set(template.materialName, template)
+    }
+  }
+
+  return (materials || []).map(row => {
+    const matched = templateByType.get(row.materialType) || templateByName.get(row.materialName)
+    if (!matched) return row
+    return {
+      ...row,
+      templateId: row.templateId ?? matched.templateId,
+      itemId: row.itemId ?? matched.itemId,
+      sampleUrl: row.sampleUrl || matched.sampleUrl || '',
+      sortOrder: row.sortOrder ?? matched.sortOrder
+    }
+  })
+}
+
 function mergeMaterials(primaryMaterials: any[], fallbackMaterials: any[]) {
   const rows = [...(primaryMaterials || []), ...(fallbackMaterials || [])]
   const map = new Map<string, any>()
@@ -1321,22 +1448,105 @@ function inferAllowedExtensions(
   noTemplateRequired = false
 ) {
   const source = `${name} ${materialType || ''} ${description || ''}`.toLowerCase()
-  if (hasTemplate) {
-    return ['doc', 'docx', 'pdf']
+  const explicitExtensions = resolveAllowedExtensionsByMaterialType(materialType || '', name)
+  if (explicitExtensions.length) {
+    return explicitExtensions
   }
   if (noTemplateRequired) {
     return ['pdf', 'jpg', 'jpeg', 'png']
   }
-  if (/docx|word|申请表|授权书|承诺书|表格|doc/.test(source)) {
-    return ['doc', 'docx', 'pdf']
-  }
   if (/照片|相片|图片|photo|image|jpg|png/.test(source)) {
     return ['jpg', 'jpeg', 'png']
+  }
+  if (/租赁合同|购房合同|劳动合同|合同/.test(source)) {
+    return ['doc', 'docx', 'pdf', 'jpg', 'jpeg', 'png']
+  }
+  if (/身份证|户口簿|居住证|学生证|残疾证|营业执照|证书|银行卡|产权证明|证明文件/.test(source)) {
+    return ['pdf', 'jpg', 'jpeg', 'png']
+  }
+  if (hasTemplate) {
+    return ['doc', 'docx', 'pdf']
+  }
+  if (/docx|word|申请表|授权书|承诺书|表格|doc/.test(source)) {
+    return ['doc', 'docx', 'pdf']
   }
   if (/pdf/.test(source)) {
     return ['pdf']
   }
   return ['pdf', 'jpg', 'jpeg', 'png']
+}
+
+function resolveAllowedExtensionsByMaterialType(materialType: string, name: string) {
+  const key = materialType.toLowerCase()
+  const text = `${name} ${key}`.toLowerCase()
+  const imageOnlyTypes = new Set([
+    'personal_photo',
+    'recent_two_inch_photo'
+  ])
+  const documentScanTypes = new Set([
+    'id_card',
+    'household_register',
+    'identity_or_household_register',
+    'social_security_card',
+    'bank_card',
+    'residence_permit_card',
+    'real_estate_certificate',
+    'business_license',
+    'student_card',
+    'disability_certificate',
+    'old_identity_document',
+    'household_previous_name_page',
+    'housing_asset_proof',
+    'vehicle_registration_proof',
+    'marriage_or_divorce_certificate',
+    'spouse_death_certificate',
+    'court_judgment_or_mediation',
+    'medical_diagnosis',
+    'residence_situation_proof',
+    'supporting_identity_evidence'
+  ])
+  const templateDocumentTypes = new Set([
+    'rental_contract',
+    'purchase_contract',
+    'labor_contract',
+    'senior_allowance_application',
+    'unit_accommodation_proof',
+    'school_accommodation_proof',
+    'labor_relation_proof',
+    'continuous_study_proof',
+    'family_relationship_proof',
+    'community_residence_proof',
+    'application_reason_proof',
+    'application_reason_note',
+    'no_criminal_record_application',
+    'no_criminal_record_proof',
+    'income_statement',
+    'family_situation_statement',
+    'low_income_family_application',
+    'low_income_hardship_proof',
+    'marriage_archive_proof',
+    'marital_status_proof',
+    'marital_status_commitment',
+    'unit_or_community_marriage_proof',
+    'same_person_identity_statement',
+    'same_person_identity_proof',
+    'unit_or_school_proof',
+    'household_change_proof',
+    'proxy_authorization',
+    'student_study_proof',
+    'unemployment_certificate'
+  ])
+
+  if (imageOnlyTypes.has(key) || /照片|相片|证件照|photo/.test(text)) {
+    return ['jpg', 'jpeg', 'png']
+  }
+  if (documentScanTypes.has(key)) {
+    return ['pdf', 'jpg', 'jpeg', 'png']
+  }
+  if (templateDocumentTypes.has(key)) {
+    return ['doc', 'docx', 'pdf']
+  }
+  return []
 }
 
 function parseFormData(value?: string) {

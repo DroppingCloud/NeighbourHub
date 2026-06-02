@@ -34,8 +34,8 @@
 
 ## 工单管理
 
-- `GET /api/workorder/list`：工单列表。参数：`status`、`staffUserId`、`pageNum`、`pageSize`。返回中包含 `materialCompleteness`，用于工作人员判断材料是否齐全。
-- `GET /api/workorder/{id}`：工单详情。返回中包含 `materialCompleteness`。
+- `GET /api/workorder/list`：工单列表。参数：`status`、`staffUserId`、`pageNum`、`pageSize`。返回中包含申请上下文和材料信息，包括 `applicationId`、`itemName`、`category`、`residentName`、`applicationStatus`、`applicationStatusLabel`、`formData`、`remark`、`submitTime`、`materialCompleteness`、`materials`，用于工作人员查看申请填写资料和核对材料是否齐全。
+- `GET /api/workorder/{id}`：工单详情。返回内容同工单列表单项，包含申请填写资料、已提交材料、材料完整性结果和工单处理信息。
 - `POST /api/workorder/audit`：审核工单。请求体：`orderId`、`action`、`opinion`。`action` 支持 `approved`、`rejected`、`supplement_required`、`completed`、`processing`。当 `action` 为 `approved` 或 `completed` 时，后端会校验必填材料是否齐全，并拦截任何预审未通过的材料；若缺少材料或存在预审失败材料，则返回参数错误。`supplement_required` 会把缺失材料名称自动追加到审核意见中。
 - `GET /api/workorder/{id}/logs`：查询工单操作日志。
 
@@ -93,3 +93,11 @@
 - `2101` 申请单不存在；`2102` 申请状态不允许操作；`2103` 无权操作申请。
 - `2201` 工单不存在；`2202` 无权处理工单；`2203` 工单状态不允许操作。
 - `2301` 服务不可用；`2302` 预约时间冲突；`2303` 预约不存在；`2304` 预约状态不允许操作。
+
+## OCR/AI 材料预审补充说明
+
+- `POST /api/application/material/{id}/ai-precheck`：对已上传材料执行后端 OCR/AI 预审。当前实现为“本地强规则 + 文档正文抽取 + 阿里百炼 DashScope 图片 OCR”：先检查文件是否存在、大小、扩展名与文件头是否匹配，再按文件类型做内容识别。JPG/JPEG/PNG 会调用 DashScope OCR；PDF 会优先抽取文本，若文本为空则将前 3 页渲染为图片后调用 DashScope OCR；DOC/DOCX 会通过 Apache POI 抽取正文。返回更新后的 `ApplicationMaterial`，包含 `precheckStatus`、`precheckRemark`、`ocrText`。
+- 对身份证、户口簿、合同、产权/不动产、申请表、证明、银行卡、学生证、残疾证、营业执照等材料，识别结果必须包含与材料名称匹配的核心字段；若 DashScope 返回“不匹配”“不是该材料”“不清晰”“模糊”“无法判断”“关键字段缺失”等结论，或文档正文中无法识别对应核心字段，后端会直接判定预审失败，不再转为人工复核通过。
+- `POST /api/application/{id}/materials/file`：真实文件上传成功后，后端会自动执行一次 OCR/AI 预审并写入 `application_material.precheck_status`、`precheck_remark`、`ocr_text`；前端提交材料时也会显式调用 `POST /api/application/material/{id}/ai-precheck` 获取最终预审结论。
+- PDF/DOC/DOCX 已支持内容级预审。限制：PDF 最多渲染前 3 页进行 OCR；旧版 `.doc` 支持 OLE Word 文档和本系统模板生成的 HTML 兼容 Word 文档；如果材料是纯图片 PDF 且未配置 `DASHSCOPE_API_KEY`，会判定无法完成自动预审。
+- 第三方 OCR 接入点：`MaterialOcrAiPrecheckService`。DashScope 配置通过 `DASHSCOPE_API_KEY`、`DASHSCOPE_API_URL`、`DASHSCOPE_OCR_MODEL`、`DASHSCOPE_OCR_ENABLED` 注入，真实密钥不得提交到 Git。

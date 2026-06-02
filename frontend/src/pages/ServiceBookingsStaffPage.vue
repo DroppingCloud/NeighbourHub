@@ -272,7 +272,7 @@ async function completeService(bookingId: number) {
   }
 }
 
-function showFeedback(booking) {
+function showFeedback(booking: BookingVO) {
   console.log(booking)
   const content = booking.feedback || '暂无评价'
   ElMessageBox.alert(content, '居民评价', { confirmButtonText: '关闭' })

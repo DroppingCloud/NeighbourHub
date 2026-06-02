@@ -110,7 +110,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets, Loading, Calendar, Check, Position, Bell, Setting } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getWorkOrderList, auditWorkOrder, type WorkOrderVO } from '@/api/workOrder'
-import { assignBooking, getBookingList, type BookingVO } from '@/api/booking'
+import { assignBooking, type BookingVO } from '@/api/booking'
 import { getStaffBookingList } from '@/api/booking'
 
 const router = useRouter()
@@ -120,11 +120,6 @@ const userInfo = computed(() => authStore.userInfo)
 const workOrders = ref<WorkOrderVO[]>([])
 const bookings = ref<BookingVO[]>([])
 const loading = ref(false)
-
-const pendingCount = ref(0)
-const confirmedCount = ref(0)
-const inProgressCount = ref(0)
-const completedCount = ref(0)
 
 const pendingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').length)
 const processingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'processing').length)
@@ -138,14 +133,20 @@ onMounted(() => {
 })
 
 async function loadWorkbench() {
-  const page = await getStaffBookingList(1, 100);
-  const all = page.records || [];
-  pendingCount.value = all.filter(b => b.status === 'pending').length;
-  confirmedCount.value = all.filter(b => b.status === 'confirmed').length;
-  completedCount.value = all.filter(b => b.status === 'completed').length;
+  loading.value = true
+  try {
+    const [workOrderPage, bookingPage] = await Promise.all([
+      getWorkOrderList({ pageNum: 1, pageSize: 50 }),
+      getStaffBookingList(1, 100)
+    ])
+    workOrders.value = getRows<WorkOrderVO>(workOrderPage)
+    bookings.value = getRows<BookingVO>(bookingPage)
+  } finally {
+    loading.value = false
+  }
 }
 
-function getPageRows<T>(page: any): T[] {
+function getRows<T>(page: any): T[] {
   if (Array.isArray(page)) return page
   return page?.records || page?.list || page?.rows || []
 }

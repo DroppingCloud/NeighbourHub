@@ -69,6 +69,11 @@ ai:
   timeout: 30000
   max-tokens: 2000
   fallback-enabled: true 
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:}
+    url: ${DASHSCOPE_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    ocr-model: ${DASHSCOPE_OCR_MODEL:qwen-vl-ocr-latest}
+    enabled: ${DASHSCOPE_OCR_ENABLED:true}
 logging:
   level:
     com.community.platform: DEBUG

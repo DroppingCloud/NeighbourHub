@@ -19,8 +19,10 @@ import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -81,6 +83,14 @@ public class ApplicationController {
         return Result.success();
     }
 
+    @Operation(summary = "清理提交失败的临时申请")
+    @DeleteMapping("/{id}/failed-draft")
+    public Result<Void> cleanupFailedDraft(@AuthenticationPrincipal Long userId,
+                                           @PathVariable Long id) {
+        applicationService.cleanupFailedDraft(userId, id);
+        return Result.success();
+    }
+
     @Operation(summary = "登记申请材料元数据")
     @PostMapping("/{id}/materials")
     public Result<Long> uploadMaterial(@AuthenticationPrincipal Long userId,
@@ -122,6 +132,13 @@ public class ApplicationController {
         return Result.success();
     }
 
+    @Operation(summary = "OCR/AI材料预审")
+    @PostMapping("/material/{id}/ai-precheck")
+    public Result<ApplicationMaterial> aiPrecheckMaterial(@AuthenticationPrincipal Long userId,
+                                                          @PathVariable Long id) {
+        return Result.success(applicationMaterialService.runAiPrecheck(userId, id));
+    }
+
     @Operation(summary = "下载或预览材料文件")
     @GetMapping("/material/{id}/file")
     public ResponseEntity<Resource> getMaterialFile(@AuthenticationPrincipal Long userId,
@@ -129,7 +146,10 @@ public class ApplicationController {
         ApplicationMaterial material = applicationMaterialService.getReadableMaterial(userId, id);
         Resource resource = applicationMaterialService.loadMaterialFile(userId, id);
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + material.getFileName() + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(material.getFileName(), java.nio.charset.StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
                 .contentType(resolveContentType(material.getFileType(), material.getFileName()))
                 .body(resource);
     }

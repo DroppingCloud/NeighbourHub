@@ -29,6 +29,7 @@
       direction="rtl"
       size="1000px"
       :modal="true"
+      class="application-submit-drawer"
     >
       <div v-if="selectedService" class="apply-form">
         <div class="service-summary">
@@ -53,7 +54,7 @@
             <el-radio-button
               v-for="option in residencePermitConditionOptions"
               :key="option.value"
-              :label="option.value"
+              :value="option.value"
             >
               {{ option.label }}
             </el-radio-button>
@@ -88,7 +89,7 @@
             <el-radio-button
               v-for="option in convenienceProofTypeOptions"
               :key="option.value"
-              :label="option.value"
+              :value="option.value"
             >
               {{ option.label }}
             </el-radio-button>
@@ -100,7 +101,7 @@
             <el-radio-button
               v-for="scenario in currentConvenienceScenarios"
               :key="scenario.value"
-              :label="scenario.value"
+              :value="scenario.value"
             >
               {{ scenario.label }}
             </el-radio-button>
@@ -172,17 +173,20 @@
             </el-form-item>
             <template v-if="isResidencePermitService">
               <template v-if="residencePermitCondition === 'stable_residence'">
-                <el-form-item label="居住起始日期" prop="residenceStartDate">
+                <el-form-item label="居住起始日期">
                   <el-date-picker
                     v-model="applyForm.residenceStartDate"
                     type="date"
                     value-format="YYYY-MM-DD"
                     placeholder="请选择居住起始日期"
                     :teleported="true"
+                    popper-class="application-date-picker"
+                    :popper-options="datePickerPopperOptions"
+                    placement="bottom-start"
                     style="width: 100%"
                   />
                 </el-form-item>
-                <el-form-item label="居住结束日期" prop="residenceEndDate">
+                <el-form-item label="居住结束日期">
                   <el-date-picker
                     v-model="applyForm.residenceEndDate"
                     type="date"
@@ -190,6 +194,9 @@
                     placeholder="请选择居住结束日期"
                     :disabled-date="disableResidenceEndDate"
                     :teleported="true"
+                    popper-class="application-date-picker"
+                    :popper-options="datePickerPopperOptions"
+                    placement="bottom-start"
                     style="width: 100%"
                   />
                 </el-form-item>
@@ -233,6 +240,7 @@
         </div>
 
         <div class="form-actions">
+          <el-button plain @click="clearCurrentDraft">清除草稿</el-button>
           <el-button @click="showFormDrawer = false">取消</el-button>
           <el-button type="primary" :loading="nextLoading" @click="nextStep">
             下一步：上传材料
@@ -275,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormRules } from 'element-plus'
 import { Document, InfoFilled, Check, House, OfficeBuilding, School } from '@element-plus/icons-vue'
@@ -298,19 +306,138 @@ const formRef = ref()
 const materialDialogVisible = ref(false)
 const activeMaterial = ref<any>(null)
 const proxyStore = useProxyStore()
+const restoringDraft = ref(false)
+const APPLICATION_DRAFT_PREFIX = 'neighbourhub:application-draft:'
+const datePickerPopperOptions = {
+  strategy: 'fixed',
+  modifiers: [
+    {
+      name: 'flip',
+      options: {
+        fallbackPlacements: ['bottom-start', 'top-start', 'right-start', 'left-start']
+      }
+    },
+    {
+      name: 'preventOverflow',
+      options: {
+        boundary: 'viewport',
+        rootBoundary: 'viewport',
+        padding: 12
+      }
+    }
+  ]
+}
 
-const applyForm = ref({
-  name: '',
-  idCard: '',
-  phone: '',
-  address: '',
-  residenceStartDate: '',
-  residenceEndDate: '',
-  employerName: '',
-  workAddress: '',
-  schoolName: '',
-  enrollmentDate: ''
-})
+function createEmptyApplyForm() {
+  return {
+    name: '',
+    idCard: '',
+    phone: '',
+    address: '',
+    residenceStartDate: '',
+    residenceEndDate: '',
+    employerName: '',
+    workAddress: '',
+    schoolName: '',
+    enrollmentDate: ''
+  }
+}
+
+const applyForm = ref(createEmptyApplyForm())
+
+function resetApplyState() {
+  applyForm.value = createEmptyApplyForm()
+  residencePermitCondition.value = 'stable_residence'
+  residencePermitHousingType.value = 'rental'
+  residencePermitProofType.value = 'rental_contract'
+  convenienceProofType.value = 'no_criminal'
+  convenienceScenario.value = 'employment'
+}
+
+function draftKey(serviceId?: number | string) {
+  return `${APPLICATION_DRAFT_PREFIX}${serviceId || selectedService.value?.id || ''}`
+}
+
+function hasDraftContent(payload: any) {
+  if (!payload) return false
+  const form = payload.formData || {}
+  return [
+    form.name,
+    form.idCard,
+    form.phone,
+    form.address,
+    form.residenceStartDate,
+    form.residenceEndDate,
+    form.employerName,
+    form.workAddress,
+    form.schoolName,
+    form.enrollmentDate
+  ].some(value => String(value || '').trim())
+}
+
+function buildDraftPayload() {
+  if (!selectedService.value?.id) return null
+  return {
+    serviceId: selectedService.value.id,
+    serviceName: selectedService.value.name,
+    savedAt: new Date().toISOString(),
+    formData: { ...applyForm.value },
+    residencePermitCondition: residencePermitCondition.value,
+    residencePermitHousingType: residencePermitHousingType.value,
+    residencePermitProofType: residencePermitProofType.value,
+    convenienceProofType: convenienceProofType.value,
+    convenienceScenario: convenienceScenario.value
+  }
+}
+
+function saveCurrentDraft() {
+  if (restoringDraft.value || !selectedService.value?.id) return
+  const payload = buildDraftPayload()
+  if (!payload) return
+  if (!hasDraftContent(payload)) {
+    localStorage.removeItem(draftKey(payload.serviceId))
+    return
+  }
+  localStorage.setItem(draftKey(payload.serviceId), JSON.stringify(payload))
+}
+
+async function restoreDraftForService(serviceId: number | string) {
+  const raw = localStorage.getItem(draftKey(serviceId))
+  if (!raw) return
+  try {
+    const payload = JSON.parse(raw)
+    restoringDraft.value = true
+    applyForm.value = {
+      ...createEmptyApplyForm(),
+      ...(payload.formData || {})
+    }
+    residencePermitCondition.value = payload.residencePermitCondition || 'stable_residence'
+    residencePermitHousingType.value = payload.residencePermitHousingType || 'rental'
+    residencePermitProofType.value = payload.residencePermitProofType || 'rental_contract'
+    convenienceProofType.value = payload.convenienceProofType || 'no_criminal'
+    convenienceScenario.value = payload.convenienceScenario || 'employment'
+    await nextTick()
+    ElMessage.success('已恢复上次未完成的申请草稿')
+  } catch {
+    localStorage.removeItem(draftKey(serviceId))
+  } finally {
+    restoringDraft.value = false
+  }
+}
+
+function clearCurrentDraft() {
+  if (selectedService.value?.id) {
+    localStorage.removeItem(draftKey(selectedService.value.id))
+  }
+  resetApplyState()
+  ElMessage.success('草稿已清除')
+}
+
+function removeCurrentDraft() {
+  if (selectedService.value?.id) {
+    localStorage.removeItem(draftKey(selectedService.value.id))
+  }
+}
 
 function material(
   materialName: string,
@@ -660,29 +787,17 @@ const formRules: FormRules = {
 async function selectService(service: any) {
   selectedService.value = service
   showFormDrawer.value = true
-  applyForm.value = {
-    name: '',
-    idCard: '',
-    phone: '',
-    address: '',
-    residenceStartDate: '',
-    residenceEndDate: '',
-    employerName: '',
-    workAddress: '',
-    schoolName: '',
-    enrollmentDate: ''
-  }
-  residencePermitCondition.value = 'stable_residence'
-  residencePermitHousingType.value = 'rental'
-  residencePermitProofType.value = 'rental_contract'
-  convenienceProofType.value = 'no_criminal'
-  convenienceScenario.value = 'employment'
+  restoringDraft.value = true
+  resetApplyState()
+  await nextTick()
+  restoringDraft.value = false
 
   const templates = await getPublicMaterialTemplates(Number(service.id)).catch(() => [])
   selectedService.value = {
     ...service,
     materials: mergeMaterials(templates, service.materials)
   }
+  await restoreDraftForService(service.id)
 }
 
 async function loadServices() {
@@ -732,9 +847,7 @@ function needsResidencePeriod() {
 function validateResidencePeriod() {
   if (!needsResidencePeriod()) return true
   if (!applyForm.value.residenceStartDate || !applyForm.value.residenceEndDate) {
-    ElMessage.warning('请选择居住起始日期和结束日期')
-    formRef.value?.validateField?.(['residenceStartDate', 'residenceEndDate']).catch?.(() => {})
-    return false
+    return true
   }
   if (applyForm.value.residenceEndDate < applyForm.value.residenceStartDate) {
     ElMessage.warning('居住结束日期不能早于起始日期')
@@ -757,17 +870,18 @@ async function nextStep() {
   nextLoading.value = true
   try {
     const templates = await getPublicMaterialTemplates(Number(selectedService.value.id)).catch(() => [])
-    const serviceMaterials = isResidencePermitService.value
+    const serviceMaterials = withTemplateIds(isResidencePermitService.value
       ? selectedResidencePermitMaterials.value
       : isConvenienceProofService.value
         ? selectedConvenienceMaterials.value
-      : mergeMaterials(templates, selectedService.value.materials)
+      : mergeMaterials(templates, selectedService.value.materials), templates)
 
     const tempData = {
       serviceId: selectedService.value.id,
       serviceName: selectedService.value.name,
       serviceCategory: selectedService.value.category,
       serviceConditions: selectedService.value.conditions,
+      proxyUserId: proxyStore.currentTarget?.profileId || null,
       applicationCondition: isResidencePermitService.value
         ? {
             condition: residencePermitCondition.value,
@@ -817,6 +931,7 @@ async function nextStep() {
       }
     }
     sessionStorage.setItem('tempApplication', JSON.stringify(tempData))
+    removeCurrentDraft()
     showFormDrawer.value = false
     router.push({
       path: '/material-upload',
@@ -825,16 +940,6 @@ async function nextStep() {
   } finally {
     nextLoading.value = false
   }
-}
-
-async function handleSubmit() {
-  const submitData = {
-    itemId: selectedItemId,
-    formData: form.value,
-    proxyUserId: proxyStore.currentTarget?.profileId || null,
-    remark: remark.value
-  }
-  await submitApplication(submitData)
 }
 
 watch(residencePermitCondition, () => {
@@ -859,6 +964,20 @@ watch(() => applyForm.value.residenceStartDate, (value) => {
 watch(convenienceProofType, () => {
   convenienceScenario.value = currentConvenienceScenarios.value[0]?.value || ''
 })
+
+watch(
+  () => ({
+    formData: { ...applyForm.value },
+    residencePermitCondition: residencePermitCondition.value,
+    residencePermitHousingType: residencePermitHousingType.value,
+    residencePermitProofType: residencePermitProofType.value,
+    convenienceProofType: convenienceProofType.value,
+    convenienceScenario: convenienceScenario.value,
+    selectedServiceId: selectedService.value?.id
+  }),
+  saveCurrentDraft,
+  { deep: true }
+)
 
 function isResidencePermitProofMaterial(row: any) {
   return isResidencePermitService.value
@@ -951,6 +1070,31 @@ function mergeMaterials(backendMaterials: any[], fallbackMaterials: any[]) {
     }
   }
   return Array.from(map.values())
+}
+
+function withTemplateIds(materials: any[], templates: any[]) {
+  const templateByType = new Map<string, any>()
+  const templateByName = new Map<string, any>()
+  for (const template of templates || []) {
+    if (template.materialType) {
+      templateByType.set(template.materialType, template)
+    }
+    if (template.materialName) {
+      templateByName.set(template.materialName, template)
+    }
+  }
+
+  return (materials || []).map(row => {
+    const matched = templateByType.get(row.materialType) || templateByName.get(row.materialName)
+    if (!matched) return row
+    return {
+      ...row,
+      templateId: row.templateId ?? matched.templateId,
+      itemId: row.itemId ?? matched.itemId,
+      sampleUrl: row.sampleUrl || matched.sampleUrl || '',
+      sortOrder: row.sortOrder ?? matched.sortOrder
+    }
+  })
 }
 
 onMounted(loadServices)
@@ -1291,6 +1435,27 @@ onMounted(loadServices)
   padding: 0.5rem 0.75rem;
   background: var(--bg-tertiary);
   border-color: var(--border-color);
+}
+
+:global(.application-submit-drawer .el-drawer__body) {
+  overflow-y: auto;
+  overflow-x: visible;
+}
+
+:global(.application-date-picker) {
+  z-index: 3000 !important;
+  max-height: calc(100vh - 1.5rem);
+  overscroll-behavior: contain;
+}
+
+:global(.application-date-picker .el-picker-panel__body-wrapper) {
+  max-height: min(70vh, 26rem);
+  overflow-y: auto;
+}
+
+:global(.application-date-picker .el-picker-panel) {
+  max-height: calc(100vh - 1.5rem);
+  position: static !important;
 }
 
 @media (max-width: 48rem) {

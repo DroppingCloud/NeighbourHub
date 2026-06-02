@@ -13,15 +13,15 @@
 | `/profile` | `ProfilePage.vue` | 个人中心 | 登录用户 | 已实现 | 查看和编辑个人资料，展示个人数据概览 |
 | `/settings` | `SettingsPage.vue` | 系统设置 | 登录用户 | 已实现 | 字体大小、关怀模式等偏好设置 |
 | `/guide` | `GuidePage.vue` | 智能导办 | 居民/家属 | 基础实现 | 导办问答、事项推荐入口；当前偏规则化实现 |
-| `/application/submit` | `ApplicationSubmitPage.vue` | 提交申请 | 居民/家属 | 已实现 | 选择事项、填写申请、提交事项申请 |
-| `/application/list` | `ApplicationListPage.vue` | 我的申请 | 居民/家属 | 已实现 | 查看申请记录、按状态筛选、补件、撤回、已撤回后重新提交 |
+| `/application/submit` | `ApplicationSubmitPage.vue` | 提交申请 | 居民/家属 | 已增强 | 选择事项、填写申请、按事项本地自动保存草稿、下次进入恢复未完成申请、进入材料上传后清理草稿 |
+| `/application/list` | `ApplicationListPage.vue` | 我的申请 | 居民/家属 | 已实现 | 查看申请记录、按状态筛选、查看申请详情、查看填写资料、预览/下载已提交材料、补件、撤回、已撤回后重新提交 |
 | `/material-upload` | `MaterialUploadPage.vue` | 材料上传 | 居民/家属 | 已增强 | 展示材料清单、必需标识、格式要求、正式模板预览/下载、规则型智能预审、补件和已撤回申请重新提交 |
 | `/booking` | `BookingPage.vue` | 服务预约 | 居民/家属 | 已实现 | 创建社区服务预约 |
 | `/booking/list` | `BookingListPage.vue` | 我的预约 | 居民/家属 | 已实现 | 查看预约列表、取消预约 |
 | `/family-binding` | `FamilyBindingPage.vue` | 家属代办 | 居民/家属 | 已实现 | 创建、查看和撤销家属代办授权 |
 | `/progress` | `ProgressPage.vue` | 进度查询 | 居民/家属 | 已实现 | 查询申请与服务进度 |
 | `/notice` | `NoticePage.vue` | 消息通知 | 登录用户 | 已实现 | 通知列表、未读状态、标记已读、关联跳转 |
-| `/workorder` | `WorkOrderManagePage.vue` | 工单管理 | 工作人员/管理员 | 已实现 | 工单列表、筛选、审核、状态流转 |
+| `/workorder` | `WorkOrderManagePage.vue` | 工单管理 | 工作人员/管理员 | 已实现 | 工单列表、筛选、查看申请详情、查看填写资料、预览/下载材料、审核、状态流转 |
 | `/staff/workbench` | `StaffWorkbenchPage.vue` | 工作人员工作台 | 工作人员/管理员 | 已实现 | 工作台概览、待办入口 |
 | `/staff/booking` | `ServiceBookingsStaffPage.vue` | 服务调度 | 工作人员/管理员 | 已实现 | 查看预约、分配工作人员、完成服务 |
 | `/admin` | - | 后台管理 | 管理员 | 已实现 | 重定向到 `/admin/dashboard` |
@@ -54,12 +54,12 @@
 |---|---|---|
 | `LoginPage.vue`、`RegisterPage.vue`、`ProfilePage.vue` | `api/auth.ts` | 登录、注册、当前用户、资料更新 |
 | `GuidePage.vue` | `api/guide.ts` | 导办推荐和对话 |
-| `ApplicationSubmitPage.vue`、`ApplicationListPage.vue`、`ProgressPage.vue` | `api/application.ts`、`api/serviceItem.ts` | 事项列表、申请提交、申请查询、撤回申请 |
+| `ApplicationSubmitPage.vue`、`ApplicationListPage.vue`、`ProgressPage.vue` | `api/application.ts`、`api/serviceItem.ts` | 事项列表、申请提交、本地草稿保存与恢复、申请查询、申请详情、材料预览/下载、撤回申请 |
 | `MaterialUploadPage.vue`、`utils/materialTemplateLibrary.ts` | `api/application.ts` | 材料登记、材料查询、正式材料模板预览/下载、规则型预审、预审结果更新、补件重新提交、撤回后重新提交 |
 | `BookingPage.vue`、`BookingListPage.vue`、`ServiceBookingsStaffPage.vue` | `api/booking.ts` | 预约创建、查询、取消、分配、完成 |
 | `FamilyBindingPage.vue` | `api/user.ts` | 家属绑定、授权列表、撤销授权 |
 | `NoticePage.vue`、`NotificationBell.vue` | `api/notice.ts` | 通知列表、未读数、标记已读 |
-| `WorkOrderManagePage.vue`、`StaffWorkbenchPage.vue` | `api/workOrder.ts` | 工单列表、详情、审核、日志 |
+| `WorkOrderManagePage.vue`、`StaffWorkbenchPage.vue` | `api/workOrder.ts` | 工单列表、申请详情、填写资料、材料预览/下载、审核、日志 |
 | `AdminServiceConfigPage.vue` | `api/serviceItem.ts` | 后台事项和材料模板管理 |
 | `AdminUserManagePage.vue` | `api/user.ts` | 后台用户管理 |
 | `StatisticsDashboardPage.vue` | `api/statistics.ts` | 后台统计数据 |

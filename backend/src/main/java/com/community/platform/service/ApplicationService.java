@@ -12,4 +12,5 @@ public interface ApplicationService {
     ApplicationVO getDetailForInternal(Long applicationId);
     void resubmit(Long userId, Long applicationId, ApplicationSubmitDTO dto);
     void withdraw(Long userId, Long applicationId);
+    void cleanupFailedDraft(Long userId, Long applicationId);
 }

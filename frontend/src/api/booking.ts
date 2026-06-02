@@ -16,6 +16,9 @@ export interface BookingVO {
   statusLabel: string
   address?: string
   remark?: string
+  staffName?: string
+  staffPhone?: string
+  feedback?: string
   createTime: string
 }
 
@@ -35,7 +38,8 @@ export const assignBooking = (id: number, staffUserId: number) =>
   request.put<any, void>(`/api/booking/${id}/assign`, { staffUserId })
 
 export function startBooking(bookingId: number) {
-    return request.put(`/api/booking/${bookingId}/start`); }
+  return request.put<any, void>(`/api/booking/${bookingId}/start`)
+}
 
 export const completeBooking = (id: number, feedback?: string) =>
   request.put<any, void>(`/api/booking/${id}/complete`, { feedback })
@@ -46,6 +50,6 @@ export const submitBookingFeedback = (id: number, feedback: string) =>
 export function getStaffBookingList(pageNum: number, pageSize: number, status?: string) {
   const params: any = { pageNum, pageSize }
   if (status) params.status = status
-  return request.get('/api/booking/staff/list', { params })
+  return request.get<any, any>('/api/booking/staff/list', { params })
 }
 

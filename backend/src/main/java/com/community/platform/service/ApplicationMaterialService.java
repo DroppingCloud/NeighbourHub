@@ -17,6 +17,7 @@ public interface ApplicationMaterialService {
     MaterialCompletenessVO checkCompletenessForSystem(Long applicationId);
     boolean hasFailedPrecheckForSystem(Long applicationId);
     void precheck(Long userId, Long materialId, MaterialPrecheckDTO dto);
+    ApplicationMaterial runAiPrecheck(Long userId, Long materialId);
     ApplicationMaterial getReadableMaterial(Long userId, Long materialId);
     Resource loadMaterialFile(Long userId, Long materialId);
 }

@@ -12,7 +12,9 @@ import com.community.platform.mapper.ApplicationFormMapper;
 import com.community.platform.mapper.ApplicationMaterialMapper;
 import com.community.platform.mapper.ServiceMaterialTemplateMapper;
 import com.community.platform.service.ApplicationMaterialService;
+import com.community.platform.service.MaterialOcrAiPrecheckService;
 import com.community.platform.vo.application.MaterialCompletenessVO;
+import com.community.platform.vo.application.MaterialAiPrecheckResultVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -44,6 +46,7 @@ public class ApplicationMaterialServiceImpl implements ApplicationMaterialServic
     private final ApplicationFormMapper applicationFormMapper;
     private final ApplicationMaterialMapper applicationMaterialMapper;
     private final ServiceMaterialTemplateMapper materialTemplateMapper;
+    private final MaterialOcrAiPrecheckService materialOcrAiPrecheckService;
 
     @Value("${app.upload.material-dir:uploads/materials}")
     private String materialUploadDir;
@@ -98,7 +101,9 @@ public class ApplicationMaterialServiceImpl implements ApplicationMaterialServic
         dto.setFilePath(relativePath.toString().replace('\\', '/'));
         dto.setFileSize(file.getSize());
         dto.setFileType(extension);
-        return upload(userId, applicationId, dto);
+        Long materialId = upload(userId, applicationId, dto);
+        runAiPrecheck(userId, materialId);
+        return materialId;
     }
 
     @Override
@@ -168,6 +173,35 @@ public class ApplicationMaterialServiceImpl implements ApplicationMaterialServic
         material.setPrecheckRemark(dto.getPrecheckRemark());
         material.setOcrText(dto.getOcrText());
         applicationMaterialMapper.updateById(material);
+    }
+
+    @Override
+    public ApplicationMaterial runAiPrecheck(Long userId, Long materialId) {
+        ApplicationMaterial material = getReadableMaterial(userId, materialId);
+        if (!StringUtils.hasText(material.getFilePath())) {
+            material.setPrecheckStatus("failed");
+            material.setPrecheckRemark("OCR/AI预审未通过：材料文件路径为空");
+            material.setOcrText("OCR/AI预审模式：本地规则引擎演示版\n材料文件路径为空，无法识别。");
+            applicationMaterialMapper.updateById(material);
+            return material;
+        }
+
+        Path path = Paths.get(materialUploadDir).toAbsolutePath().normalize().resolve(material.getFilePath()).normalize();
+        Path root = Paths.get(materialUploadDir).toAbsolutePath().normalize();
+        if (!path.startsWith(root)) {
+            material.setPrecheckStatus("failed");
+            material.setPrecheckRemark("OCR/AI预审未通过：材料文件路径非法");
+            material.setOcrText("OCR/AI预审模式：本地规则引擎演示版\n材料文件路径非法，无法识别。");
+            applicationMaterialMapper.updateById(material);
+            return material;
+        }
+
+        MaterialAiPrecheckResultVO result = materialOcrAiPrecheckService.precheck(material, path);
+        material.setPrecheckStatus(result.getPrecheckStatus());
+        material.setPrecheckRemark(result.getPrecheckRemark());
+        material.setOcrText(result.getOcrText());
+        applicationMaterialMapper.updateById(material);
+        return material;
     }
 
     @Override

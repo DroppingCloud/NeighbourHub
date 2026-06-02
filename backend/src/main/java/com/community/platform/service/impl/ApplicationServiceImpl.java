@@ -9,6 +9,7 @@ import com.community.platform.dto.application.ApplicationQueryDTO;
 import com.community.platform.dto.application.ApplicationSubmitDTO;
 import com.community.platform.entity.ApplicationForm;
 import com.community.platform.entity.ApplicationMaterial;
+import com.community.platform.entity.Notice;
 import com.community.platform.entity.ResidentProfile;
 import com.community.platform.entity.ServiceItem;
 import com.community.platform.entity.ServiceMaterialTemplate;
@@ -16,6 +17,7 @@ import com.community.platform.entity.User;
 import com.community.platform.entity.WorkOrder;
 import com.community.platform.mapper.ApplicationFormMapper;
 import com.community.platform.mapper.ApplicationMaterialMapper;
+import com.community.platform.mapper.NoticeMapper;
 import com.community.platform.mapper.ResidentProfileMapper;
 import com.community.platform.mapper.ServiceItemMapper;
 import com.community.platform.mapper.ServiceMaterialTemplateMapper;
@@ -34,6 +36,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,6 +55,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ServiceItemMapper serviceItemMapper;
     private final ServiceMaterialTemplateMapper materialTemplateMapper;
     private final WorkOrderMapper workOrderMapper;
+    private final NoticeMapper noticeMapper;
     private final UserMapper userMapper;
     private final ResidentProfileMapper residentProfileMapper;  // 新增，用于获取社区ID
     private final NoticeService noticeService;
@@ -56,7 +63,8 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final WorkOrderService workOrderService;  // 新增，用于工单分配和状态更新
     private final ObjectMapper objectMapper;
 
-    // ==================== 原有方法（保留并增强） ====================
+    @org.springframework.beans.factory.annotation.Value("${app.upload.material-dir:uploads/materials}")
+    private String materialUploadDir;
 
     @Override
     @Transactional
@@ -202,7 +210,49 @@ public class ApplicationServiceImpl implements ApplicationService {
                 applicationId);
     }
 
-    // ==================== 新增私有辅助方法 ====================
+    @Override
+    @Transactional
+    public void cleanupFailedDraft(Long userId, Long applicationId) {
+        ApplicationForm application = requireApplication(applicationId);
+        if (!userId.equals(application.getUserId()) && !userId.equals(application.getProxyUserId())) {
+            throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
+        }
+        if (!"pending".equals(application.getStatus())) {
+            throw new BusinessException(ResultCode.APPLICATION_STATUS_ERROR);
+        }
+
+        List<ApplicationMaterial> materials = applicationMaterialMapper.selectList(new LambdaQueryWrapper<ApplicationMaterial>()
+                .eq(ApplicationMaterial::getApplicationId, applicationId));
+        for (ApplicationMaterial material : materials) {
+            deleteMaterialFileQuietly(material);
+        }
+
+        applicationMaterialMapper.delete(new LambdaQueryWrapper<ApplicationMaterial>()
+                .eq(ApplicationMaterial::getApplicationId, applicationId));
+        workOrderMapper.delete(new LambdaQueryWrapper<WorkOrder>()
+                .eq(WorkOrder::getApplicationId, applicationId));
+        noticeMapper.delete(new LambdaQueryWrapper<Notice>()
+                .eq(Notice::getUserId, application.getUserId())
+                .eq(Notice::getRefType, "application")
+                .eq(Notice::getRefId, applicationId));
+        applicationFormMapper.deleteById(applicationId);
+    }
+
+    private void deleteMaterialFileQuietly(ApplicationMaterial material) {
+        if (!StringUtils.hasText(material.getFilePath())) {
+            return;
+        }
+        Path root = Paths.get(materialUploadDir).toAbsolutePath().normalize();
+        Path file = root.resolve(material.getFilePath()).normalize();
+        if (!file.startsWith(root)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException ignored) {
+            // 文件清理失败不影响数据库回滚，后续可由运维定期清理孤立文件。
+        }
+    }
 
     /**
      * 解析申请对应的社区ID

@@ -96,6 +96,9 @@ export const resubmitApplication = (id: number, data: ApplicationSubmitRequest) 
 export const withdrawApplication = (id: number) =>
   request.put<any, void>(`/api/application/${id}/withdraw`)
 
+export const cleanupFailedDraftApplication = (id: number) =>
+  request.delete<any, void>(`/api/application/${id}/failed-draft`)
+
 export const uploadApplicationMaterial = (applicationId: number, data: ApplicationMaterialRequest) =>
   request.post<any, number>(`/api/application/${applicationId}/materials`, data)
 
@@ -126,6 +129,9 @@ export const checkApplicationMaterialCompleteness = (applicationId: number) =>
 
 export const precheckApplicationMaterial = (materialId: number, data: MaterialPrecheckRequest) =>
   request.put<any, void>(`/api/application/material/${materialId}/precheck`, data)
+
+export const runAiPrecheckApplicationMaterial = (materialId: number) =>
+  request.post<any, ApplicationMaterialVO>(`/api/application/material/${materialId}/ai-precheck`)
 
 export const getApplicationMaterialFileUrl = (materialId: number) =>
   `/api/application/material/${materialId}/file`

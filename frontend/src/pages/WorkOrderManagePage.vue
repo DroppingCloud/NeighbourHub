@@ -41,6 +41,13 @@
 
         <div class="card-actions">
           <el-button
+            size="small"
+            plain
+            @click="openDetailDialog(order)"
+          >
+            查看详情
+          </el-button>
+          <el-button
             v-if="order.status === 'pending'"
             type="primary"
             size="small"
@@ -79,18 +86,118 @@
 
       <el-empty v-if="!loading && workOrders.length === 0" description="暂无工单" />
     </div>
+
+    <el-dialog v-model="detailDialogVisible" title="申请详情" width="72rem">
+      <template v-if="activeOrder">
+        <section class="detail-section">
+          <div class="detail-section-title">基本信息</div>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <span class="detail-label">事项名称</span>
+              <span>{{ activeOrder.itemName || `申请 ${activeOrder.applicationId}` }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">事项分类</span>
+              <span>{{ activeOrder.category || '-' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">申请人</span>
+              <span>{{ activeOrder.residentName || '-' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">申请状态</span>
+              <span>{{ activeOrder.applicationStatusLabel || activeOrder.applicationStatus || '-' }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">工单状态</span>
+              <span>{{ activeOrder.statusLabel || activeOrder.status }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">提交时间</span>
+              <span>{{ activeOrder.submitTime || activeOrder.createTime || '-' }}</span>
+            </div>
+            <div class="detail-item detail-item-wide">
+              <span class="detail-label">办理备注</span>
+              <span>{{ cleanText(activeOrder.remark) }}</span>
+            </div>
+            <div class="detail-item detail-item-wide">
+              <span class="detail-label">审核意见</span>
+              <span>{{ cleanText(activeOrder.auditOpinion) }}</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="detail-section">
+          <div class="detail-section-title">填写资料</div>
+          <div v-if="formRows.length" class="form-data-table">
+            <div v-for="row in formRows" :key="row.key" class="form-data-row">
+              <span class="detail-label">{{ formatFieldLabel(row.key) }}</span>
+              <span>{{ formatFieldValue(row.value) }}</span>
+            </div>
+          </div>
+          <el-empty v-else description="暂无填写资料" />
+        </section>
+
+        <section class="detail-section">
+          <div class="detail-section-title">提交材料</div>
+
+          <el-empty
+            v-if="!activeOrder?.materials?.length"
+            description="该申请暂无已提交材料"
+          />
+
+          <div v-else class="submitted-material-list">
+            <div
+              v-for="material in activeOrder.materials"
+              :key="material.materialId"
+              class="submitted-material-card"
+            >
+              <div class="submitted-material-main">
+                <div class="submitted-material-name">{{ material.materialName }}</div>
+                <div class="submitted-material-meta">
+                  {{ material.fileName || '未命名文件' }}
+                  <span v-if="material.fileSize"> · {{ formatFileSize(Number(material.fileSize)) }}</span>
+                  <span v-if="material.precheckStatus"> · {{ precheckLabel(material.precheckStatus) }}</span>
+                </div>
+                <div v-if="material.precheckRemark" class="submitted-material-remark">
+                  预审备注：{{ material.precheckRemark }}
+                </div>
+              </div>
+              <div class="submitted-material-actions">
+                <el-button size="small" type="primary" link @click="previewMaterial(material.materialId)">
+                  预览
+                </el-button>
+                <el-button size="small" type="primary" link @click="downloadMaterial(material)">
+                  下载
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { auditWorkOrder, getWorkOrderList, type AuditRequest, type WorkOrderVO } from '@/api/workOrder'
+import { getApplicationMaterialFileUrl, type ApplicationMaterialVO } from '@/api/application'
 
 const activeTab = ref('pending')
 //const activeTab = ref('')
 const loading = ref(false)
 const workOrders = ref<WorkOrderVO[]>([])
+const detailDialogVisible = ref(false)
+const activeOrder = ref<WorkOrderVO | null>(null)
+
+const formRows = computed(() => {
+  const data = parseFormData(activeOrder.value?.formData)
+  return Object.entries(data)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => ({ key, value }))
+})
 
 function getStatusType(status: string) {
   const map: Record<string, string> = {
@@ -113,7 +220,7 @@ function materialSummary(order: WorkOrderVO) {
 async function loadWorkOrders() {
   loading.value = true
   try {
-    const params = { pageNum: 1, pageSize: 50 }  // 注意 pageSize 改为 50
+    const params: { pageNum: number; pageSize: number; status?: string } = { pageNum: 1, pageSize: 50 }
     if (activeTab.value) {
       params.status = activeTab.value
     }
@@ -121,6 +228,128 @@ async function loadWorkOrders() {
     workOrders.value = page.records || []
   } finally {
     loading.value = false
+  }
+}
+
+function openDetailDialog(order: WorkOrderVO) {
+  activeOrder.value = order
+  detailDialogVisible.value = true
+}
+
+function parseFormData(formData?: string) {
+  if (!formData) {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(formData)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+function formatFieldLabel(key: string) {
+  const map: Record<string, string> = {
+    applicantName: '申请人',
+    applicant: '申请人',
+    realName: '真实姓名',
+    name: '姓名',
+    idCard: '身份证号',
+    phone: '联系电话',
+    contactPhone: '联系电话',
+    address: '居住地址',
+    residenceAddress: '居住地址',
+    residenceStartDate: '居住起始日期',
+    residenceEndDate: '居住结束日期',
+    residenceCondition: '申请条件',
+    housingType: '居住情况',
+    reason: '申请事由',
+    remark: '备注'
+  }
+  return map[key] || key
+}
+
+function formatFieldValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map(formatFieldValue).join('、')
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, val]) => `${formatFieldLabel(key)}：${formatFieldValue(val)}`)
+      .join('；')
+  }
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否'
+  }
+  return value === undefined || value === null || value === '' ? '-' : String(value)
+}
+
+function cleanText(value?: string) {
+  if (!value || /^\?+$/.test(value)) {
+    return '暂无'
+  }
+  return value
+}
+
+function precheckLabel(status: string) {
+  const map: Record<string, string> = {
+    pending: '待预审',
+    passed: '预审通过',
+    failed: '预审未通过'
+  }
+  return map[status] || status
+}
+
+function formatFileSize(size: number) {
+  if (!Number.isFinite(size) || size <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = size
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex++
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+async function previewMaterial(materialId: number) {
+  const blob = await fetchMaterialBlob(materialId)
+  if (!blob) return
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+
+async function downloadMaterial(material: ApplicationMaterialVO) {
+  const blob = await fetchMaterialBlob(material.materialId)
+  if (!blob) return
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = material.fileName || `${material.materialName || '材料'}.${material.fileType || 'dat'}`
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
+
+async function fetchMaterialBlob(materialId: number) {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    ElMessage.error('登录已过期，请重新登录')
+    return null
+  }
+  try {
+    const response = await fetch(getApplicationMaterialFileUrl(materialId), {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+    if (!response.ok) {
+      ElMessage.error(response.status === 401 ? '登录已过期，请重新登录' : '材料文件读取失败')
+      return null
+    }
+    return await response.blob()
+  } catch {
+    ElMessage.error('材料文件读取失败')
+    return null
   }
 }
 
@@ -230,5 +459,113 @@ onMounted(loadWorkOrders)
   gap: 0.75rem;
   justify-content: flex-end;
   flex-wrap: wrap;
+}
+
+.detail-section {
+  margin-bottom: 1.5rem;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.detail-item,
+.form-data-row {
+  display: flex;
+  gap: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.detail-item-wide {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  width: 6rem;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.form-data-table {
+  border: 0.0625rem solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.form-data-row {
+  padding: 0.75rem 1rem;
+  border-bottom: 0.0625rem solid var(--border-color);
+}
+
+.form-data-row:last-child {
+  border-bottom: 0;
+}
+
+.submitted-material-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.submitted-material-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  border: 0.0625rem solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.submitted-material-main {
+  min-width: 0;
+}
+
+.submitted-material-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.submitted-material-meta,
+.submitted-material-remark {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.submitted-material-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 48rem) {
+  .submitted-material-card,
+  .detail-item,
+  .form-data-row {
+    flex-direction: column;
+  }
+
+  .detail-label {
+    width: auto;
+  }
 }
 </style>

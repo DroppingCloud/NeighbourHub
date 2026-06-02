@@ -44,6 +44,12 @@ export const useNotificationStore = defineStore('notification', () => {
   }
 
   async function loadNotifications(force = false) {
+    if (!localStorage.getItem('token')) {
+      notifications.value = []
+      unreadTotal.value = 0
+      loaded.value = false
+      return
+    }
     if (loading.value || (loaded.value && !force)) return
 
     loading.value = true

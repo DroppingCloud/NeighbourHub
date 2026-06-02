@@ -141,3 +141,16 @@ http://localhost:5173
 ```text
 lsof -ti:5173 | xargs kill -9
 ```
+
+### 阿里百炼 OCR 配置
+
+材料 OCR/AI 预审支持阿里云百炼 DashScope。复制 `.env` 后填写：
+
+```properties
+DASHSCOPE_API_KEY=你的百炼API Key
+DASHSCOPE_API_URL=https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+DASHSCOPE_OCR_MODEL=qwen-vl-ocr-latest
+DASHSCOPE_OCR_ENABLED=true
+```
+
+当前会对 JPG/JPEG/PNG 图片材料调用百炼 OCR；PDF、DOC、DOCX 暂不做文件转图片，使用本地规则预审兜底。

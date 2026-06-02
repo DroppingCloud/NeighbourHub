@@ -731,7 +731,6 @@ p, span, div, li, .text-body {
 
 /* 日期选择器面板基础样式 */
 .el-picker-panel {
-  position: absolute !important;
   background: #fff !important;
   border-radius: 0.5rem !important;
   box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.15) !important;

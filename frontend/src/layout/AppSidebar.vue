@@ -115,9 +115,22 @@ const role = computed(() => normalizeRole(authStore.userInfo?.role || 'resident'
 const activeMenu = computed(() => route.path)
 const unreadCount = computed(() => notificationStore.unreadCount)
 
-function handleSelect(index: string) {
-  if (index && index !== route.path) {
-    router.push(index)
+async function handleSelect(index: string) {
+  if (!index) return
+
+  try {
+    if (index === route.path) {
+      window.location.href = index
+      return
+    }
+    await router.push(index)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (message.includes('Failed to fetch dynamically imported module') || message.includes('ERR_CACHE_READ_FAILURE')) {
+      window.location.href = index
+      return
+    }
+    throw error
   }
 }
 

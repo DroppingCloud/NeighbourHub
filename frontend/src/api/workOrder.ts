@@ -1,16 +1,23 @@
 import request from '@/utils/request'
-import type { MaterialCompletenessVO } from './application'
+import type { ApplicationMaterialVO, MaterialCompletenessVO } from './application'
 
 export interface WorkOrderVO {
   orderId: number
   applicationId: number
   itemName: string
+  category?: string
   residentName: string
+  applicationStatus?: string
+  applicationStatusLabel?: string
+  formData?: string
+  remark?: string
+  submitTime?: string
   status: string
   statusLabel: string
   auditOpinion?: string
   staffName?: string
   materialCompleteness?: MaterialCompletenessVO
+  materials?: ApplicationMaterialVO[]
   createTime: string
   updateTime: string
 }

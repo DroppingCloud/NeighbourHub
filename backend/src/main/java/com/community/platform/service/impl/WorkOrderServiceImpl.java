@@ -8,6 +8,7 @@ import com.community.platform.common.ResultCode;
 import com.community.platform.dto.workorder.WorkOrderAuditDTO;
 import com.community.platform.dto.workorder.WorkOrderQueryDTO;
 import com.community.platform.entity.ApplicationForm;
+import com.community.platform.entity.ApplicationMaterial;
 import com.community.platform.entity.ResidentProfile;
 import com.community.platform.entity.ServiceItem;
 import com.community.platform.entity.User;
@@ -15,6 +16,7 @@ import com.community.platform.entity.WorkOrder;
 import com.community.platform.entity.WorkOrderLog;
 import com.community.platform.enums.WorkOrderStatus;
 import com.community.platform.mapper.ApplicationFormMapper;
+import com.community.platform.mapper.ApplicationMaterialMapper;
 import com.community.platform.mapper.ResidentProfileMapper;
 import com.community.platform.mapper.ServiceItemMapper;
 import com.community.platform.mapper.UserMapper;
@@ -49,6 +51,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final WorkOrderMapper workOrderMapper;
     private final WorkOrderLogMapper workOrderLogMapper;
     private final ApplicationFormMapper applicationFormMapper;
+    private final ApplicationMaterialMapper applicationMaterialMapper;
     private final ServiceItemMapper serviceItemMapper;
     private final ResidentProfileMapper residentProfileMapper;
     private final UserMapper userMapper;
@@ -58,17 +61,19 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     // 显式构造器，在 ApplicationService 参数上添加 @Lazy
     public WorkOrderServiceImpl(WorkOrderMapper workOrderMapper,
-                                WorkOrderLogMapper workOrderLogMapper,
-                                ApplicationFormMapper applicationFormMapper,
-                                ServiceItemMapper serviceItemMapper,
-                                ResidentProfileMapper residentProfileMapper,
-                                UserMapper userMapper,
+                                 WorkOrderLogMapper workOrderLogMapper,
+                                 ApplicationFormMapper applicationFormMapper,
+                                 ApplicationMaterialMapper applicationMaterialMapper,
+                                 ServiceItemMapper serviceItemMapper,
+                                 ResidentProfileMapper residentProfileMapper,
+                                 UserMapper userMapper,
                                 ApplicationMaterialService applicationMaterialService,
                                 NoticeService noticeService,
                                 @Lazy ApplicationService applicationService) {
         this.workOrderMapper = workOrderMapper;
         this.workOrderLogMapper = workOrderLogMapper;
         this.applicationFormMapper = applicationFormMapper;
+        this.applicationMaterialMapper = applicationMaterialMapper;
         this.serviceItemMapper = serviceItemMapper;
         this.residentProfileMapper = residentProfileMapper;
         this.userMapper = userMapper;
@@ -365,12 +370,19 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         vo.setOrderId(order.getOrderId());
         vo.setApplicationId(order.getApplicationId());
         vo.setItemName(item == null ? null : item.getItemName());
+        vo.setCategory(item == null ? null : item.getCategory());
         vo.setResidentName(resolveResidentName(application));
+        vo.setApplicationStatus(application == null ? null : application.getStatus());
+        vo.setApplicationStatusLabel(application == null ? null : statusLabel(application.getStatus()));
+        vo.setFormData(application == null ? null : application.getFormData());
+        vo.setRemark(application == null ? null : application.getRemark());
+        vo.setSubmitTime(application == null ? null : application.getSubmitTime());
         vo.setStatus(order.getStatus());
         vo.setStatusLabel(statusLabel(order.getStatus()));
         vo.setAuditOpinion(order.getAuditOpinion());
         vo.setStaffName(staff == null ? null : staff.getUsername());
         vo.setMaterialCompleteness(application == null ? null : applicationMaterialService.checkCompletenessForSystem(application.getApplicationId()));
+        vo.setMaterials(application == null ? List.of() : listMaterials(application.getApplicationId()));
         vo.setCreateTime(order.getCreateTime());
         vo.setUpdateTime(order.getUpdateTime());
 
@@ -384,6 +396,12 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             }
         }
         return vo;
+    }
+
+    private List<ApplicationMaterial> listMaterials(Long applicationId) {
+        return applicationMaterialMapper.selectList(new LambdaQueryWrapper<ApplicationMaterial>()
+                .eq(ApplicationMaterial::getApplicationId, applicationId)
+                .orderByAsc(ApplicationMaterial::getMaterialId));
     }
 
     private String resolveResidentName(ApplicationForm application) {

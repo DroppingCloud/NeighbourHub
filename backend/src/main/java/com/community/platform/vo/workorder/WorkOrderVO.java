@@ -1,10 +1,12 @@
 package com.community.platform.vo.workorder;
 
 import com.community.platform.vo.application.MaterialCompletenessVO;
+import com.community.platform.entity.ApplicationMaterial;
 import lombok.Data;
 import com.community.platform.vo.application.ApplicationVO;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Work order view object.
@@ -18,7 +20,19 @@ public class WorkOrderVO {
 
     private String itemName;
 
+    private String category;
+
     private String residentName;
+
+    private String applicationStatus;
+
+    private String applicationStatusLabel;
+
+    private String formData;
+
+    private String remark;
+
+    private LocalDateTime submitTime;
 
     private String status;
 
@@ -29,6 +43,8 @@ public class WorkOrderVO {
     private String staffName;
 
     private MaterialCompletenessVO materialCompleteness;
+
+    private List<ApplicationMaterial> materials;
 
     private LocalDateTime createTime;
 

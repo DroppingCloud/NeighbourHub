@@ -160,6 +160,13 @@ const router = createRouter({
   routes
 })
 
+router.onError((error, to) => {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes('Failed to fetch dynamically imported module') || message.includes('ERR_CACHE_READ_FAILURE')) {
+    window.location.href = to.fullPath
+  }
+})
+
 function normalizeRole(role?: string) {
   if (!role) return ''
   return role.startsWith('ROLE_') ? role : `ROLE_${role.toUpperCase()}`

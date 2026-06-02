@@ -47,6 +47,11 @@ export const useProxyStore = defineStore('proxy', () => {
     }
   }
 
+  function clearTarget() {
+    setCurrentTarget(null)
+    targets.value = []
+  }
+
   // 恢复上次选择的代办目标
   async function restoreTarget() {
     await loadTargets()
@@ -57,5 +62,5 @@ export const useProxyStore = defineStore('proxy', () => {
     }
   }
 
-  return { currentTarget, targets, loadTargets, setCurrentTarget, restoreTarget }
+  return { currentTarget, targets, loadTargets, setCurrentTarget, clearTarget, restoreTarget }
 })

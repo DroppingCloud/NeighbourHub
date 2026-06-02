@@ -111,19 +111,22 @@ onMounted(() => {
 })
 
 async function loadHomeData() {
+  if (!authStore.token) {
+    return
+  }
   loadingApplications.value = true
   loadingServices.value = true
   try {
-    const [appPage, bookingPage, servicePage, count] = await Promise.all([
+    const [appResult, bookingResult, serviceResult, countResult] = await Promise.allSettled([
       getApplicationList({ pageNum: 1, pageSize: 10 }),
       getBookingList(1, 10),
       getPublicServiceItemList({ status: 'enabled', pageNum: 1, pageSize: 8 }),
       getUnreadCount()
     ])
-    applications.value = getPageRows<ApplicationVO>(appPage)
-    bookings.value = getPageRows<BookingVO>(bookingPage)
-    services.value = getPageRows<ServiceItemVO>(servicePage)
-    unreadCount.value = Number(count || 0)
+    applications.value = appResult.status === 'fulfilled' ? getPageRows<ApplicationVO>(appResult.value) : []
+    bookings.value = bookingResult.status === 'fulfilled' ? getPageRows<BookingVO>(bookingResult.value) : []
+    services.value = serviceResult.status === 'fulfilled' ? getPageRows<ServiceItemVO>(serviceResult.value) : []
+    unreadCount.value = countResult.status === 'fulfilled' ? Number(countResult.value || 0) : 0
   } finally {
     loadingApplications.value = false
     loadingServices.value = false
