@@ -41,8 +41,10 @@
 | `create_time` | `DATETIME` | NOT NULL | 创建时间 |
 | `update_time` | `DATETIME` | NOT NULL | 更新时间 |
 | `deleted` | `TINYINT` | NOT NULL, DEFAULT 0 | 逻辑删除 |
+| `role` | `VARCHAR(30)` | | `admin/staff/resident/family`，便于基础角色判断 |
+| `community_id` | `BIGINT` | | 社区 ID，用于工作人员数据隔离 |
 
-索引：`uk_username`、`uk_phone`、`idx_status`。  
+索引：`uk_username`、`uk_phone`、`idx_status`、`idx_user_community_id`。  
 相关接口：`POST /api/auth/login`、`POST /api/auth/register`、`GET /api/auth/me`。
 
 ---
@@ -69,6 +71,7 @@
 |---|---|---|---|
 | `profile_id` | `BIGINT` | PK, AUTO_INCREMENT | 档案 ID |
 | `user_id` | `BIGINT` | UNIQUE, NULLABLE | 关联登录用户 ID |
+| `community_id` | `BIGINT` | | 社区 ID，用于居民档案和工单数据隔离 |
 | `real_name` | `VARCHAR(50)` | NOT NULL | 真实姓名 |
 | `id_card` | `VARCHAR(18)` | UNIQUE | 身份证号 |
 | `gender` | `VARCHAR(10)` | | `male/female/private` |
@@ -79,7 +82,7 @@
 | `create_time` | `DATETIME` | NOT NULL | 创建时间 |
 | `update_time` | `DATETIME` | NOT NULL | 更新时间 |
 
-索引：`uk_user_id`、`uk_id_card`。  
+索引：`uk_user_id`、`uk_id_card`、`idx_profile_community_id`。  
 相关接口：`GET /api/auth/me`、`PUT /api/auth/me`。
 
 ---
@@ -205,13 +208,14 @@
 | `order_id` | `BIGINT` | PK, AUTO_INCREMENT | 工单 ID |
 | `application_id` | `BIGINT` | NOT NULL, UNIQUE | 关联申请 ID（一对一） |
 | `staff_user_id` | `BIGINT` | | 处理工作人员 ID |
+| `community_id` | `BIGINT` | | 社区 ID，用于工作人员仅查看本社区工单 |
 | `status` | `VARCHAR(30)` | NOT NULL, DEFAULT `pending` | 工单状态（见下方） |
 | `audit_opinion` | `TEXT` | | 审核意见 |
 | `create_time` | `DATETIME` | NOT NULL | 创建时间 |
 | `update_time` | `DATETIME` | NOT NULL | 更新时间 |
 | `finish_time` | `DATETIME` | | 办结时间 |
 
-索引：`uk_application_id`、`idx_staff_user_id`、`idx_status`、`idx_create_time`、`idx_staff_status(staff_user_id, status)`。  
+索引：`uk_application_id`、`idx_staff_user_id`、`idx_work_order_community_id`、`idx_status`、`idx_create_time`、`idx_staff_status(staff_user_id, status)`。  
 状态：`pending`（待审核）→ `approved`（审核通过）/ `rejected`（已驳回）/ `supplement_required`（退回补件）→ `completed`（已办结）。  
 相关接口：`GET /api/workorder/list`、`POST /api/workorder/audit`、`GET /api/workorder/{id}/logs`。
 
@@ -259,8 +263,9 @@
 | `update_time` | `DATETIME` | NOT NULL | 更新时间 |
 | `complete_time` | `DATETIME` | | 完成时间 |
 | `deleted` | `TINYINT` | NOT NULL, DEFAULT 0 | 逻辑删除 |
+| `community_id` | `BIGINT` | | 社区 ID，用于工作人员服务预约数据隔离 |
 
-索引：`idx_user_id`、`idx_profile_id`、`idx_proxy_user_id`、`idx_status`、`idx_expect_time`、`idx_staff_status(staff_user_id, status)`。  
+索引：`idx_user_id`、`idx_profile_id`、`idx_proxy_user_id`、`idx_status`、`idx_expect_time`、`idx_staff_status(staff_user_id, status)`、`idx_booking_community_id`。  
 状态：`pending`（待确认）→ `confirmed`（已确认）→ `in_progress`（服务中）→ `completed`（已完成）/ `cancelled`（已取消）。  
 相关接口：`POST /api/booking/create`、`GET /api/booking/list`、`PUT /api/booking/{id}/cancel`。
 
@@ -307,7 +312,7 @@
 
 | 表名 | Entity | Mapper | 核对结论 |
 |---|---|---|---|
-| `resident_profile` | `ResidentProfile` | `ResidentProfileMapper` | 字段一致：`profile_id`、`user_id`、`real_name`、`id_card`、`address`、`age`、`gender`、`birthday`、`resident_type`、`create_time`、`update_time`。 |
+| `resident_profile` | `ResidentProfile` | `ResidentProfileMapper` | 字段一致：`profile_id`、`user_id`、`community_id`、`real_name`、`id_card`、`address`、`age`、`gender`、`birthday`、`resident_type`、`create_time`、`update_time`。 |
 | `service_item` | `ServiceItem` | `ServiceItemMapper` | 字段一致：`item_id`、`item_name`、`item_code`、`category`、`description`、`conditions`、`process_steps`、`status`、`create_time`、`update_time`、`deleted`。 |
 | `service_material_template` | `ServiceMaterialTemplate` | `ServiceMaterialTemplateMapper` | 字段一致：`template_id`、`item_id`、`material_name`、`material_type`、`description`、`sample_url`、`is_required`、`sort_order`。 |
 | `application_form` | `ApplicationForm` | `ApplicationFormMapper` | 字段一致：`application_id`、`user_id`、`profile_id`、`item_id`、`proxy_user_id`、`status`、`form_data`、`remark`、`submit_time`、`update_time`、`deleted`。 |

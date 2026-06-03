@@ -221,6 +221,32 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .orderByAsc(WorkOrderLog::getLogId));
     }
 
+    @Override
+    public Map<String, Long> getStats() {
+        User currentUser = SecurityUtils.getCurrentUser();
+        Long communityId = currentUser != null && "staff".equals(currentUser.getRole())
+                ? currentUser.getCommunityId()
+                : null;
+
+        long pending = countByStatus("pending", communityId);
+        long processing = countByStatus("processing", communityId);
+        long approved = countByStatus("approved", communityId);
+        long supplementRequired = countByStatus("supplement_required", communityId);
+        long completed = countByStatus("completed", communityId);
+        long rejected = countByStatus("rejected", communityId);
+
+        return Map.of(
+                "pending", pending,
+                "processing", processing,
+                "approved", approved,
+                "supplementRequired", supplementRequired,
+                "completed", completed,
+                "rejected", rejected,
+                "active", pending + processing,
+                "total", pending + processing + approved + supplementRequired + completed + rejected
+        );
+    }
+
     // ==================== 新增方法（工单分配、转派、批量审核等） ====================
 
     @Override
@@ -448,6 +474,15 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             case "completed" -> "已办结";
             default -> status;
         };
+    }
+
+    private long countByStatus(String status, Long communityId) {
+        LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<WorkOrder>()
+                .eq(WorkOrder::getStatus, status);
+        if (communityId != null) {
+            wrapper.eq(WorkOrder::getCommunityId, communityId);
+        }
+        return workOrderMapper.selectCount(wrapper);
     }
 
     private long page(Integer pageNum) {

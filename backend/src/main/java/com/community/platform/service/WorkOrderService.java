@@ -7,6 +7,7 @@ import com.community.platform.entity.WorkOrderLog;
 import com.community.platform.vo.workorder.WorkOrderVO;
 
 import java.util.List;
+import java.util.Map;
 
 public interface WorkOrderService {
     Page<WorkOrderVO> getList(WorkOrderQueryDTO query);
@@ -17,4 +18,5 @@ public interface WorkOrderService {
     void autoReassign(Long orderId);
     void batchAudit(Long staffUserId, List<WorkOrderAuditDTO> audits);
     void updateStatusByApplicationId(Long applicationId, String status);
+    Map<String, Long> getStats();
 }

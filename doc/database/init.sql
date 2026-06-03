@@ -28,10 +28,13 @@ CREATE TABLE IF NOT EXISTS `user` (
   `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted`     TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除: 0正常 1已删除',
+  `role`        VARCHAR(30)  DEFAULT NULL            COMMENT 'admin/staff/resident/family',
+  `community_id` BIGINT      DEFAULT NULL            COMMENT '社区 ID',
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `uk_username` (`username`),
   UNIQUE KEY `uk_phone` (`phone`),
-  KEY `idx_status` (`status`)
+  KEY `idx_status` (`status`),
+  KEY `idx_user_community_id` (`community_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户账号表';
 
 -- ------------------------------------------------------------
@@ -52,6 +55,7 @@ CREATE TABLE IF NOT EXISTS `user_role` (
 CREATE TABLE IF NOT EXISTS `resident_profile` (
   `profile_id`    BIGINT       NOT NULL AUTO_INCREMENT,
   `user_id`       BIGINT       DEFAULT NULL COMMENT '关联用户 ID，可为空（支持先建档后绑定账号）',
+  `community_id`  BIGINT       DEFAULT NULL COMMENT '社区 ID',
   `real_name`     VARCHAR(50)  NOT NULL     COMMENT '真实姓名',
   `id_card`       VARCHAR(18)  DEFAULT NULL COMMENT '身份证号',
   `gender`        VARCHAR(10)  DEFAULT NULL COMMENT 'male/female/private',
@@ -63,7 +67,8 @@ CREATE TABLE IF NOT EXISTS `resident_profile` (
   `update_time`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`profile_id`),
   UNIQUE KEY `uk_user_id` (`user_id`),
-  UNIQUE KEY `uk_id_card` (`id_card`)
+  UNIQUE KEY `uk_id_card` (`id_card`),
+  KEY `idx_profile_community_id` (`community_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='居民档案表';
 
 -- ------------------------------------------------------------
@@ -180,6 +185,7 @@ CREATE TABLE IF NOT EXISTS `work_order` (
   `order_id` BIGINT NOT NULL AUTO_INCREMENT,
   `application_id` BIGINT NOT NULL COMMENT 'Application ID',
   `staff_user_id` BIGINT DEFAULT NULL COMMENT 'Assigned staff user ID',
+  `community_id` BIGINT DEFAULT NULL COMMENT 'Community ID for staff isolation',
   `status` VARCHAR(30) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/approved/supplement_required/rejected/completed/cancelled',
   `audit_opinion` TEXT DEFAULT NULL COMMENT 'Audit opinion',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -188,6 +194,7 @@ CREATE TABLE IF NOT EXISTS `work_order` (
   PRIMARY KEY (`order_id`),
   UNIQUE KEY `uk_application_id` (`application_id`),
   KEY `idx_staff_user_id` (`staff_user_id`),
+  KEY `idx_work_order_community_id` (`community_id`),
   KEY `idx_status`        (`status`),
   KEY `idx_create_time`   (`create_time`),
   KEY `idx_staff_status`  (`staff_user_id`, `status`)
@@ -231,13 +238,15 @@ CREATE TABLE IF NOT EXISTS `service_booking` (
   `update_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `complete_time`  DATETIME     DEFAULT NULL COMMENT '完成时间',
   `deleted`        TINYINT      NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0正常 1已删除',
+  `community_id`   BIGINT       DEFAULT NULL COMMENT '社区 ID',
   PRIMARY KEY (`booking_id`),
   KEY `idx_user_id`      (`user_id`),
   KEY `idx_profile_id`   (`profile_id`),
   KEY `idx_proxy_user_id`(`proxy_user_id`),
   KEY `idx_status`       (`status`),
   KEY `idx_expect_time`  (`expect_time`),
-  KEY `idx_staff_status` (`staff_user_id`, `status`)
+  KEY `idx_staff_status` (`staff_user_id`, `status`),
+  KEY `idx_booking_community_id` (`community_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='社区服务预约表';
 
 -- ------------------------------------------------------------
@@ -268,12 +277,12 @@ CREATE TABLE IF NOT EXISTS `notice` (
 -- ============================================================
 
 INSERT IGNORE INTO `user`
-  (`user_id`, `username`, `password`, `phone`, `status`)
+  (`user_id`, `username`, `password`, `phone`, `status`, `role`, `community_id`)
 VALUES
-  (1, 'admin',      '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active'),
-  (2, 'staff01',    '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active'),
-  (3, 'resident01', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active'),
-  (4, 'family01',   '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active');
+  (1, 'admin',      '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', 1),
+  (2, 'staff01',    '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 1),
+  (3, 'resident01', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', 1),
+  (4, 'family01',   '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', 1);
 
 INSERT IGNORE INTO `user_role` (`user_id`, `role_code`) VALUES
   (1, 'ROLE_ADMIN'),
@@ -281,16 +290,29 @@ INSERT IGNORE INTO `user_role` (`user_id`, `role_code`) VALUES
   (3, 'ROLE_RESIDENT'),
   (4, 'ROLE_FAMILY');
 
+UPDATE `user` u
+LEFT JOIN `user_role` r ON u.user_id = r.user_id
+SET
+  u.role = CASE r.role_code
+    WHEN 'ROLE_ADMIN' THEN 'admin'
+    WHEN 'ROLE_STAFF' THEN 'staff'
+    WHEN 'ROLE_FAMILY' THEN 'family'
+    ELSE 'resident'
+  END,
+  u.community_id = COALESCE(u.community_id, 1)
+WHERE u.user_id IN (1, 2, 3, 4);
+
 -- ============================================================
 -- UTF-8 correction block for active demo data and material rules.
 -- Keep this block last so it overrides any legacy seed rows above.
 -- ============================================================
 
 INSERT INTO resident_profile
-(user_id, real_name, id_card, address, age, gender, birthday, resident_type)
+(user_id, community_id, real_name, id_card, address, age, gender, birthday, resident_type)
 VALUES
-(3, '居民用户', '110101195901011234', '幸福社区1号楼101室', 65, 'private', '1959-01-01', 'local')
+(3, 1, '居民用户', '110101195901011234', '幸福社区1号楼101室', 65, 'private', '1959-01-01', 'local')
 ON DUPLICATE KEY UPDATE
+  community_id = VALUES(community_id),
   real_name = VALUES(real_name),
   id_card = VALUES(id_card),
   address = VALUES(address),

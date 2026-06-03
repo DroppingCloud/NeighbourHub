@@ -15,6 +15,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "工单管理")
 @RestController
@@ -28,6 +29,12 @@ public class WorkOrderController {
     @GetMapping("/list")
     public Result<Page<WorkOrderVO>> list(WorkOrderQueryDTO query) {
         return Result.success(workOrderService.getList(query));
+    }
+
+    @Operation(summary = "工单统计")
+    @GetMapping("/stats")
+    public Result<Map<String, Long>> stats() {
+        return Result.success(workOrderService.getStats());
     }
 
     @Operation(summary = "工单详情")
