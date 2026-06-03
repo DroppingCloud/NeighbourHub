@@ -5,7 +5,6 @@
       <p>工作人员处理社区服务预约、派单与完成登记</p>
     </div>
 
-    <!-- 统计卡片 - 显示总数 -->
     <div class="stats-row">
       <div class="stat-card-mini">
         <div class="stat-value">{{ pendingCount }}</div>
@@ -25,23 +24,13 @@
       </div>
     </div>
 
-    <el-tabs v-model="activeTab" class="dispatch-tabs" @tab-change="onTabChange">
+    <el-tabs v-model="activeTab" class="dispatch-tabs" @tab-change="loadBookings">
       <el-tab-pane label="待调度" name="pending">
         <div v-for="booking in pendingBookings" :key="booking.bookingId" class="dispatch-card">
           <BookingInfo :booking="booking" />
           <div class="card-actions">
-            <el-select 
-              v-model="selectedStaff[booking.bookingId]" 
-              placeholder="服务人员" 
-              size="small"
-              clearable
-            >
-              <el-option 
-                v-for="staff in staffList" 
-                :key="staff.id" 
-                :label="staff.name" 
-                :value="staff.id" 
-              />
+            <el-select v-model="selectedStaff[booking.bookingId]" placeholder="服务人员" size="small">
+              <el-option label="staff01" :value="2" />
             </el-select>
             <el-button type="primary" size="small" @click="dispatch(booking.bookingId)">
               <el-icon><Position /></el-icon>
@@ -95,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, watch, defineComponent, h } from 'vue'
+import { computed, defineComponent, h, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheck, Position, VideoPlay, ChatLineSquare } from '@element-plus/icons-vue'
 import {
@@ -106,65 +95,42 @@ import {
   type BookingVO
 } from '@/api/booking'
 
-interface StaffVO {
-  id: number
-  name: string
-}
-
 const activeTab = ref('pending')
 const bookings = ref<BookingVO[]>([])
 const selectedStaff = ref<Record<number, number>>({})
-const staffList = ref<StaffVO[]>([])
 
+// 统计数据
 const pendingCount = ref(0)
 const confirmedCount = ref(0)
 const inProgressCount = ref(0)
 const completedCount = ref(0)
 
-const pendingBookings = computed(() => 
-  bookings.value.filter(item => item.status === 'pending')
-)
-const confirmedBookings = computed(() => 
-  bookings.value.filter(item => item.status === 'confirmed')
-)
-const inProgressBookings = computed(() => 
-  bookings.value.filter(item => item.status === 'in_progress')
-)
-const completedBookings = computed(() => 
-  bookings.value.filter(item => item.status === 'completed')
-)
+const pendingBookings = computed(() => bookings.value.filter(item => item.status === 'pending'))
+const confirmedBookings = computed(() => bookings.value.filter(item => item.status === 'confirmed'))
+const inProgressBookings = computed(() => bookings.value.filter(item => item.status === 'in_progress'))
+const completedBookings = computed(() => bookings.value.filter(item => item.status === 'completed'))
 
 const BookingInfo = defineComponent({
-  name: 'BookingInfo',
   props: {
     booking: {
-      type: Object as () => BookingVO,
+      type: Object,
       required: true
     }
   },
   setup(props) {
-    const row = (label: string, value: string) => {
-      return h('div', { class: 'info-row' }, [
-        h('span', { class: 'label' }, `${label}：`),
-        h('span', value || '-')
-      ])
-    }
-    
     return () => {
-      const booking = props.booking
+      const booking = props.booking as BookingVO
       return h('div', { class: 'booking-info' }, [
         h('div', { class: 'card-header' }, [
           h('div', { class: 'service-info' }, [
             h('span', { class: 'service-name' }, booking.serviceTypeLabel || booking.serviceType),
-            h('span', { 
-              class: `status-pill status-${booking.status}` 
-            }, booking.statusLabel || booking.status)
+            h('span', { class: `status-pill status-${booking.status}` }, booking.statusLabel || booking.status)
           ]),
           h('span', { class: 'create-time' }, booking.createTime)
         ]),
         h('div', { class: 'card-body' }, [
           row('预约时间', booking.expectTime),
-          row('服务地址', booking.address || ''),
+          row('服务地址', booking.address || '-'),
           row('备注', booking.remark || '无')
         ])
       ])
@@ -172,60 +138,33 @@ const BookingInfo = defineComponent({
   }
 })
 
+function row(label: string, value: string) {
+  return h('div', { class: 'info-row' }, [
+    h('span', { class: 'label' }, `${label}：`),
+    h('span', value)
+  ])
+}
+
 async function loadBookings() {
-  try {
-    const statusMap: Record<string, string | undefined> = {
-      pending: 'pending',
-      confirmed: 'confirmed',
-      in_progress: 'in_progress',
-      completed: 'completed'
-    }
-    const status = statusMap[activeTab.value]
-    const res = await getStaffBookingList(1, 100, status)
-    bookings.value = res.records || []
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载预约列表失败')
-  }
+  const status = activeTab.value === 'pending' ? 'pending' :
+                 activeTab.value === 'confirmed' ? 'confirmed' :
+                 activeTab.value === 'in_progress' ? 'in_progress' :
+                 activeTab.value === 'completed' ? 'completed' : undefined
+  const page = await getStaffBookingList(1, 100, status)
+  bookings.value = page.records || []
 }
 
 async function loadStatistics() {
-  try {
-    const [pending, confirmed, inProgress, completed] = await Promise.all([
-      getStaffBookingList(1, 1, 'pending'),
-      getStaffBookingList(1, 1, 'confirmed'),
-      getStaffBookingList(1, 1, 'in_progress'),
-      getStaffBookingList(1, 1, 'completed')
-    ])
-    pendingCount.value = pending.total
-    confirmedCount.value = confirmed.total
-    inProgressCount.value = inProgress.total
-    completedCount.value = completed.total
-  } catch (error: any) {
-    ElMessage.error(error.message || '加载统计数据失败')
-  }
-}
-
-async function loadStaffList() {
-  /*
-  try {
-    const res = await getStaffList({ status: 'active', role: 'worker' })
-    staffList.value = Array.isArray(res) ? res : (res.records || [])
-  } catch (error) {
-    console.error('加载员工列表失败，使用默认数据', error)
-    staffList.value = [
-      { id: 1, name: '张师傅' },
-      { id: 2, name: '李阿姨' },
-      { id: 3, name: '王师傅' }
-    ]
-  }
-  */
- 
-  staffList.value = [
-    { id: 1, name: '张师傅' },
-    { id: 2, name: '李阿姨' },
-    { id: 3, name: '王师傅' },
-    { id: 4, name: '赵师傅' }
-  ]
+  const [pending, confirmed, inProgress, completed] = await Promise.all([
+    getStaffBookingList(1, 1, 'pending'),
+    getStaffBookingList(1, 1, 'confirmed'),
+    getStaffBookingList(1, 1, 'in_progress'),
+    getStaffBookingList(1, 1, 'completed')
+  ])
+  pendingCount.value = pending.total
+  confirmedCount.value = confirmed.total
+  inProgressCount.value = inProgress.total
+  completedCount.value = completed.total
 }
 
 async function dispatch(bookingId: number) {
@@ -238,6 +177,7 @@ async function dispatch(bookingId: number) {
     await assignBooking(bookingId, staffId)
     ElMessage.success('派单成功')
     activeTab.value = 'confirmed'
+    await loadBookings()
     await loadStatistics()
   } catch (error: any) {
     ElMessage.error(error.message || '派单失败')
@@ -250,52 +190,37 @@ async function start(bookingId: number) {
     await startBooking(bookingId)
     ElMessage.success('服务已开始')
     activeTab.value = 'in_progress'
+    await loadBookings()
     await loadStatistics()
   } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '开始服务失败')
-    }
+    ElMessage.error(error.message || '开始服务失败')
   }
 }
 
 async function completeService(bookingId: number) {
-  try {
-    await ElMessageBox.confirm('确定该预约服务已完成吗？', '确认完成', { type: 'success' })
-    await completeBooking(bookingId, '工作人员确认服务完成')
-    ElMessage.success('服务已完成')
-    await loadBookings()
-    await loadStatistics()
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '完成服务失败')
-    }
-  }
+  await ElMessageBox.confirm('确定该预约服务已完成吗？', '确认完成', { type: 'success' })
+  await completeBooking(bookingId, '工作人员确认服务完成')
+  ElMessage.success('服务已完成')
+  await loadBookings()
+  await loadStatistics()
 }
 
 function showFeedback(booking: BookingVO) {
-  console.log(booking)
-  const content = booking.feedback || '暂无评价'
-  ElMessageBox.alert(content, '居民评价', { confirmButtonText: '关闭' })
+  const feedback = booking.feedback || '暂无评价内容'
+  ElMessageBox.alert(feedback, '居民评价', {
+    confirmButtonText: '关闭',
+    type: 'info'
+  })
 }
 
-async function onTabChange() {
-  await loadBookings()
-  selectedStaff.value = {}
-}
-
-watch(activeTab, () => {
-})
-
-onMounted(async () => {
-  await Promise.all([
-    loadBookings(),
-    loadStatistics(),
-    loadStaffList()
-  ])
+onMounted(() => {
+  loadBookings()
+  loadStatistics()
 })
 </script>
 
 <style scoped>
+/* 保持原有样式不变 */
 .service-dispatch-container {
   max-width: 75rem;
   margin: 0 auto;
@@ -309,13 +234,13 @@ onMounted(async () => {
 .page-header h2 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--text-primary, #1f2937);
+  color: var(--text-primary);
   margin-bottom: 0.5rem;
 }
 
 .page-header p {
   font-size: 0.875rem;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
 }
 
 .stats-row {
@@ -326,44 +251,38 @@ onMounted(async () => {
 }
 
 .stat-card-mini {
-  background: var(--card-bg, #ffffff);
-  border-radius: var(--radius-lg, 0.75rem);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
   padding: 1rem;
   text-align: center;
-  box-shadow: var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
-  border: 1px solid var(--border-color, #e5e7eb);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-value {
   font-size: 2rem;
   font-weight: 700;
-  color: var(--text-primary, #1f2937);
+  color: var(--text-primary);
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   margin-top: 0.25rem;
 }
 
 .dispatch-tabs {
-  background: var(--card-bg, #ffffff);
-  border-radius: var(--radius-lg, 0.75rem);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
   padding: 1rem;
-  box-shadow: var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05));
+  box-shadow: var(--shadow-sm);
 }
 
 .dispatch-card {
-  background: var(--card-bg, #ffffff);
-  border-radius: var(--radius-md, 0.5rem);
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
-  border: 1px solid var(--border-color, #e5e7eb);
-  transition: box-shadow 0.2s;
-}
-
-.dispatch-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border: 0.0625rem solid var(--border-color);
 }
 
 :deep(.card-header) {
@@ -371,7 +290,7 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  border-bottom: 0.0625rem solid var(--border-color);
   margin-bottom: 0.75rem;
   flex-wrap: wrap;
 }
@@ -380,19 +299,17 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex-wrap: wrap;
 }
 
 :deep(.service-name) {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--text-primary, #1f2937);
+  color: var(--text-primary);
 }
 
 :deep(.create-time),
 :deep(.label) {
-  color: var(--text-muted, #6b7280);
-  font-size: 0.875rem;
+  color: var(--text-muted);
 }
 
 :deep(.card-body) {
@@ -404,7 +321,7 @@ onMounted(async () => {
 :deep(.info-row) {
   display: flex;
   font-size: 0.875rem;
-  color: var(--text-secondary, #4b5563);
+  color: var(--text-secondary);
 }
 
 :deep(.label) {
@@ -418,27 +335,19 @@ onMounted(async () => {
   border-radius: 999px;
   padding: 0.15rem 0.5rem;
   font-size: 0.75rem;
-  background: var(--bg-tertiary, #f3f4f6);
-  color: var(--text-secondary, #4b5563);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .status-pending {
-  background: #fef3c7;
   color: #b7791f;
 }
 
 .status-confirmed {
-  background: #dbeafe;
   color: #2563eb;
 }
 
-.status-in_progress {
-  background: #e0e7ff;
-  color: #4f46e5;
-}
-
 .status-completed {
-  background: #d1fae5;
   color: #15803d;
 }
 
@@ -447,6 +356,6 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid var(--border-color, #e5e7eb);
+  border-top: 0.0625rem solid var(--border-color);
 }
 </style>
