@@ -65,4 +65,53 @@ public class ProxyPermissionServiceImpl implements ProxyPermissionService {
 
         return targetUserId;
     }
+
+    @Override
+    public void validateProxyPermission(Long currentUserId, Long targetUserId, String actionType) {
+        if (currentUserId.equals(targetUserId)) {
+            return; // 本人操作无需校验
+        }
+
+        ProxyRelation relation = proxyRelationMapper.selectOne(new LambdaQueryWrapper<ProxyRelation>()
+                .eq(ProxyRelation::getProxyUserId, currentUserId)
+                .eq(ProxyRelation::getTargetUserId, targetUserId)
+                .eq(ProxyRelation::getStatus, "active"));
+        if (relation == null) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "您无权为该用户代办业务");
+        }
+
+        String authorizedActions = relation.getAuthorizedActions();
+        if (StringUtils.hasText(authorizedActions)) {
+            Set<String> actions = Arrays.stream(authorizedActions.split(","))
+                    .map(String::trim)
+                    .collect(Collectors.toSet());
+            if (!actions.contains(actionType)) {
+                throw new BusinessException(ResultCode.FORBIDDEN, "您没有被授权执行此操作");
+            }
+        }
+    }
+
+    @Override
+    public boolean hasProxyPermission(Long currentUserId, Long targetUserId, String actionType) {
+        if (currentUserId.equals(targetUserId)) {
+            return true;
+        }
+
+        ProxyRelation relation = proxyRelationMapper.selectOne(new LambdaQueryWrapper<ProxyRelation>()
+                .eq(ProxyRelation::getProxyUserId, currentUserId)
+                .eq(ProxyRelation::getTargetUserId, targetUserId)
+                .eq(ProxyRelation::getStatus, "active"));
+        if (relation == null) {
+            return false;
+        }
+
+        String authorizedActions = relation.getAuthorizedActions();
+        if (!StringUtils.hasText(authorizedActions)) {
+            return true;
+        }
+        Set<String> actions = Arrays.stream(authorizedActions.split(","))
+                .map(String::trim)
+                .collect(Collectors.toSet());
+        return actions.contains(actionType);
+    }
 }

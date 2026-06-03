@@ -88,10 +88,6 @@
         <router-link to="/register" class="link">立即注册</router-link>
       </div>
 
-      <div class="notice">
-        <el-icon><InfoFilled /></el-icon>
-        <span>初始化账号密码均为 123456。登录后会按后端返回角色进入对应界面。</span>
-      </div>
     </div>
   </AuthLayout>
 </template>

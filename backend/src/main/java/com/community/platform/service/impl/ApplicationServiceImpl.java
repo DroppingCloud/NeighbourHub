@@ -61,6 +61,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final NoticeService noticeService;
     private final ApplicationMaterialService applicationMaterialService;
     private final WorkOrderService workOrderService;  // 新增，用于工单分配和状态更新
+    private final com.community.platform.service.ProxyPermissionService proxyPermissionService;
     private final ObjectMapper objectMapper;
 
     @org.springframework.beans.factory.annotation.Value("${app.upload.material-dir:uploads/materials}")
@@ -69,6 +70,11 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     @Transactional
     public Long submit(Long userId, ApplicationSubmitDTO dto) {
+        // 代办权限校验
+        if (dto.getProxyFor() != null) {
+            proxyPermissionService.validateProxyPermission(userId, dto.getProxyFor(), "apply");
+        }
+
         ServiceItem item = requireOnlineItem(dto.getItemId());
 
         ApplicationForm application = new ApplicationForm();
@@ -113,6 +119,8 @@ public class ApplicationServiceImpl implements ApplicationService {
     public Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query, Long proxyFor) {
         LambdaQueryWrapper<ApplicationForm> wrapper = new LambdaQueryWrapper<>();
         if (proxyFor != null) {
+            // 校验代理权限
+            proxyPermissionService.validateProxyPermission(userId, proxyFor, "query");
             wrapper.eq(ApplicationForm::getProxyUserId, proxyFor);
         } else {
             wrapper.and(w -> w.eq(ApplicationForm::getUserId, userId)
@@ -136,7 +144,11 @@ public class ApplicationServiceImpl implements ApplicationService {
     public ApplicationVO getDetail(Long userId, Long applicationId) {
         ApplicationForm application = requireApplication(applicationId);
         if (!userId.equals(application.getUserId()) && !userId.equals(application.getProxyUserId())) {
-            throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
+            // 检查是否为有效代理人
+            Long targetUserId = application.getUserId();
+            if (!proxyPermissionService.hasProxyPermission(userId, targetUserId, "query")) {
+                throw new BusinessException(ResultCode.APPLICATION_NO_PERMISSION);
+            }
         }
         return toApplicationVO(application, true);
     }

@@ -15,20 +15,10 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    // 家属代办：如果当前有代办目标，自动添加 _proxyFor 参数
+    // 家属代办：如果当前有代办目标，自动添加 _proxyFor 参数（始终作为 URL 查询参数）
     const proxyStore = useProxyStore()
     if (proxyStore.currentTarget) {
-      // 添加到 URL 参数中（GET 请求）或请求体（POST/PUT）
-      if (config.method === 'get') {
-        config.params = { ...config.params, _proxyFor: proxyStore.currentTarget.profileId }
-      } else {
-        // 对于 POST/PUT 等，添加到 data 中（后端需要从请求体解析）
-        if (config.data && typeof config.data === 'object') {
-          config.data._proxyFor = proxyStore.currentTarget.profileId
-        } else {
-          config.data = { _proxyFor: proxyStore.currentTarget.profileId }
-        }
-      }
+      config.params = { ...config.params, _proxyFor: proxyStore.currentTarget.targetUserId }
     }
     return config
   },

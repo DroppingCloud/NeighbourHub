@@ -7,6 +7,7 @@ import com.community.platform.service.ProxyRelationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
@@ -23,8 +24,9 @@ public class ProxyRelationController {
 
     private final ProxyRelationService proxyRelationService;
 
-    @Operation(summary = "绑定被代理人")
+    @Operation(summary = "绑定被代理人（仅管理员可直接绑定，普通用户请使用 /apply 流程）")
     @PostMapping("/bind")
+    @PreAuthorize("hasRole('ADMIN')")
     public Result<Long> bind(@AuthenticationPrincipal Long userId, @RequestBody ProxyBindDTO dto) {
         return Result.success(proxyRelationService.bind(userId, dto));
     }
@@ -42,8 +44,9 @@ public class ProxyRelationController {
         return Result.success();
     }
 
-    @Operation(summary = "家属发起绑定申请")
+    @Operation(summary = "家属发起绑定申请（仅家属角色可调用）")
     @PostMapping("/apply")
+    @PreAuthorize("hasRole('FAMILY')")
     public Result<Long> apply(@AuthenticationPrincipal Long userId,
                           @Valid @RequestBody ProxyApplyDTO dto) {
         return Result.success(proxyRelationService.apply(userId, dto));

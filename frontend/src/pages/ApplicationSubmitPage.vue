@@ -881,7 +881,7 @@ async function nextStep() {
       serviceName: selectedService.value.name,
       serviceCategory: selectedService.value.category,
       serviceConditions: selectedService.value.conditions,
-      proxyUserId: proxyStore.currentTarget?.profileId || null,
+      proxyUserId: proxyStore.currentTarget?.targetUserId || null,
       applicationCondition: isResidencePermitService.value
         ? {
             condition: residencePermitCondition.value,
