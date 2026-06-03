@@ -15,6 +15,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
       - ./doc/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/mysql/conf.d/charset.cnf:/etc/mysql/conf.d/charset.cnf:ro
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     networks:
       - app_network

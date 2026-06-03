@@ -85,13 +85,25 @@ docker compose down
 docker compose down -v
 ```
 
-**重建数据库（适用于数据库大规模更新）**
-```                          
-# 删除原数据库                
-docker exec community_mysql mysql -uappuser -papp_password_123 -e "DROP DATABASE community_service;"
-# 重建数据库
-docker exec community_mysql mysql -uappuser -papp_password_123 < doc/database/init.sql   
+**更新或重建数据库**
+
+日常运行不需要重复导入 `init.sql`。如果数据库表结构更新、旧数据出现乱码，或需要恢复到演示初始数据，可选择以下方式。
+
+保留 Docker 数据卷，只执行最新初始化脚本：
+
+```bash
+docker cp doc/database/init.sql community_mysql:/tmp/init.sql
+docker exec community_mysql sh -c "mysql --default-character-set=utf8mb4 -uroot -p123456 < /tmp/init.sql"
 ```
+
+彻底重建数据库（会清空本地 MySQL 数据）：
+
+```bash
+docker compose -p community-service down -v
+docker compose -p community-service up -d
+```
+
+MySQL 容器已挂载 `docker/mysql/conf.d/charset.cnf`，新建容器后服务端和容器内 `mysql` 客户端默认使用 `utf8mb4`。如果是旧容器，需要执行一次 `docker compose -p community-service up -d --force-recreate mysql` 让配置生效。
 
 ### 3.2 启动后端
 
