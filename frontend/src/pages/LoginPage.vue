@@ -1,6 +1,6 @@
 <template>
   <AuthLayout>
-    <div class="login-box" :class="{ 'is-ready': isReady }">
+    <div class="login-box">
       <div class="form-header">
         <h2 class="form-title">欢迎回来</h2>
         <p class="form-hint">请选择登录方式</p>
@@ -16,7 +16,6 @@
         >
           {{ tab.label }}
         </button>
-        <span class="tab-indicator" :style="tabIndicatorStyle"></span>
       </div>
 
       <el-form
@@ -25,7 +24,6 @@
         :model="form"
         :rules="currentRules"
         label-position="top"
-        class="login-form"
         @keyup.enter="handleLogin"
       >
         <el-form-item v-if="showPhone" label="手机号码" prop="phone">
@@ -112,7 +110,6 @@
           type="primary"
           size="large"
           class="submit-btn"
-          :class="{ 'btn-pulse': loginReady }"
           :loading="loading"
           @click="handleLogin"
         >
@@ -537,19 +534,10 @@ function handleForgot() {
 <style scoped>
 .login-box {
   width: 100%;
-  opacity: 0;
-  transform: translateY(12px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
 }
 
-.login-box.is-ready {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* Header */
 .form-header {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .form-title {
@@ -560,17 +548,18 @@ function handleForgot() {
   margin-bottom: 0.375rem;
 }
 
-.form-hint {
+.form-hint,
+.form-footer,
+.notice,
+.quick-users {
   font-size: 0.875rem;
   color: var(--text-muted);
 }
 
-/* Tabs with sliding indicator */
 .login-tabs {
-  position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
+  gap: 0.25rem;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
   padding: 0.25rem;
@@ -578,8 +567,6 @@ function handleForgot() {
 }
 
 .tab-btn {
-  position: relative;
-  z-index: 1;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -589,45 +576,15 @@ function handleForgot() {
   line-height: 1.4;
   min-width: 0;
   white-space: nowrap;
-  transition: color 0.25s ease;
-  font-size: inherit;
 }
 
 .tab-btn.active {
+  background: var(--card-bg);
   color: var(--text-primary);
   font-weight: 600;
-}
-
-.tab-indicator {
-  position: absolute;
-  top: 0.25rem;
-  left: 0.25rem;
-  width: calc(25% - 0.125rem);
-  height: calc(100% - 0.5rem);
-  background: var(--card-bg);
-  border-radius: calc(var(--radius-sm) - 0.125rem);
   box-shadow: var(--shadow-sm);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  pointer-events: none;
 }
 
-/* Form transition */
-.form-field-enter-active,
-.form-field-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.form-field-enter-from {
-  opacity: 0;
-  transform: translateX(8px);
-}
-
-.form-field-leave-to {
-  opacity: 0;
-  transform: translateX(-8px);
-}
-
-/* Unavailable panel */
 .unavailable-panel {
   display: flex;
   gap: 0.75rem;
@@ -651,100 +608,42 @@ function handleForgot() {
   margin: 0;
 }
 
-/* Password eye */
 .pwd-eye {
   cursor: pointer;
   color: var(--text-muted);
-  transition: color 0.2s;
 }
 
-.pwd-eye:hover {
-  color: var(--gold);
-}
-
-/* Submit button */
 .submit-btn {
   width: 100%;
   min-height: 2.75rem;
   margin-top: 0.5rem;
-  transition: all 0.3s ease !important;
 }
 
-.submit-btn.btn-pulse {
-  box-shadow: 0 0 0 0 rgba(26, 26, 46, 0.3) !important;
-  animation: pulse-shadow 2s infinite;
-}
-
-@keyframes pulse-shadow {
-  0% { box-shadow: 0 0 0 0 rgba(26, 26, 46, 0.25); }
-  50% { box-shadow: 0 0 0 6px rgba(26, 26, 46, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(26, 26, 46, 0); }
-}
-
-/* Quick users */
 .quick-users {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  margin-top: 1.25rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
+  margin-top: 1rem;
 }
 
-.quick-label {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-
-.quick-user-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
+.quick-users button {
   border: 0.0625rem solid var(--border-color);
   background: var(--card-bg);
   color: var(--text-secondary);
-  border-radius: 2rem;
-  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.65rem;
   cursor: pointer;
-  font-size: 0.8125rem;
-  transition: all 0.25s ease;
 }
 
-.quick-user-btn:hover {
-  border-color: var(--gold);
+.quick-users button:hover {
   color: var(--gold);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(212, 168, 67, 0.15);
+  border-color: var(--gold);
 }
 
-.quick-user-btn:active {
-  transform: translateY(0) scale(0.97);
-}
-
-.quick-dot {
-  width: 0.4375rem;
-  height: 0.4375rem;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* Quick button staggered entrance */
-.quick-btn-enter-active {
-  transition: opacity 0.3s ease var(--delay, 0ms), transform 0.3s ease var(--delay, 0ms);
-}
-
-.quick-btn-enter-from {
-  opacity: 0;
-  transform: translateY(6px) scale(0.9);
-}
-
-/* Footer */
 .form-footer {
   text-align: center;
   margin-top: 1.5rem;
-  font-size: 0.875rem;
-  color: var(--text-muted);
 }
 
 .form-footer .link {
