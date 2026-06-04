@@ -72,11 +72,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Bell, Warning, CircleCheck, Service, Right } from '@element-plus/icons-vue'
 import { useNotificationStore } from '@/stores/notification'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const notificationStore = useNotificationStore()
@@ -109,7 +110,18 @@ function closePopover() {
 }
 
 onMounted(() => {
-  notificationStore.loadNotifications()
+  notificationStore.startPolling()
+})
+
+onUnmounted(() => {
+  notificationStore.stopPolling && notificationStore.stopPolling()
+})
+
+// restart polling when login state changes
+const auth = useAuthStore()
+watch(() => auth.token, (val) => {
+  if (val) notificationStore.startPolling()
+  else notificationStore.stopPolling && notificationStore.stopPolling()
 })
 </script>
 

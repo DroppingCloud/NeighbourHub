@@ -37,4 +37,8 @@ public class User {
 
     private String role;
     private Long communityId;
+    /** 系统分配账号（如 SQxxxx） */
+    private String account;
+    /** 头像文件相对路径，例如 uploads/avatars/xxx.jpg */
+    private String avatar;
 }

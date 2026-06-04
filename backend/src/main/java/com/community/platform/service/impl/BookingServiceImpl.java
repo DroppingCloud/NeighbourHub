@@ -32,6 +32,7 @@ public class BookingServiceImpl implements BookingService {
     private final ServiceBookingMapper serviceBookingMapper;
     private final NoticeService noticeService;
     private final UserMapper userMapper;                 // 新增
+    private final com.community.platform.mapper.UserRoleMapper userRoleMapper;
     private final ResidentProfileMapper residentProfileMapper; // 新增
 
     // ==================== 原有方法（保留并增强） ====================
@@ -133,8 +134,9 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权派单");
         }
         ServiceBooking booking = requireBooking(bookingId);
-        // 社区隔离
-        if (!operator.getCommunityId().equals(booking.getCommunityId())) {
+        // 社区隔离：仅在双方都配置了 communityId 时生效
+        if (operator.getCommunityId() != null && booking.getCommunityId() != null
+                && !operator.getCommunityId().equals(booking.getCommunityId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "只能派单本社区的预约");
         }
         // 状态必须是 pending
@@ -146,7 +148,8 @@ public class BookingServiceImpl implements BookingService {
         if (staff == null || !"staff".equals(staff.getRole())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "服务人员不存在或无效");
         }
-        if (!staff.getCommunityId().equals(booking.getCommunityId())) {
+        if (staff.getCommunityId() != null && booking.getCommunityId() != null
+                && !staff.getCommunityId().equals(booking.getCommunityId())) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "服务人员不属于本社区");
         }
         // 派单
@@ -214,19 +217,30 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     public Page<BookingVO> getStaffList(Long staffUserId, String status, Integer pageNum, Integer pageSize) {
-        // 校验当前用户是否是工作人员（实际应从 SecurityContext 获取，此处简单校验参数）
+        // 校验当前用户是否是工作人员（优先检查 user.role，兼容老数据再检查 user_role 表）
         User staff = userMapper.selectById(staffUserId);
-        if (staff == null || !"staff".equals(staff.getRole())) {
+        boolean isStaff = false;
+        if (staff != null && "staff".equals(staff.getRole())) {
+            isStaff = true;
+        }
+        if (!isStaff) {
+            // fallback: check user_role mapping
+            isStaff = userRoleMapper.selectList(new LambdaQueryWrapper<com.community.platform.entity.UserRole>()
+                    .eq(com.community.platform.entity.UserRole::getUserId, staffUserId))
+                    .stream().map(com.community.platform.entity.UserRole::getRoleCode)
+                    .anyMatch(code -> "ROLE_STAFF".equals(code));
+        }
+        if (!isStaff) {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权查看预约列表");
         }
         Long communityId = staff.getCommunityId();
-        if (communityId == null) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "工作人员未分配社区");
-        }
 
         LambdaQueryWrapper<ServiceBooking> wrapper = new LambdaQueryWrapper<ServiceBooking>()
-                .eq(ServiceBooking::getCommunityId, communityId)
                 .orderByDesc(ServiceBooking::getCreateTime);
+        // 如果系统仅有单个社区，则不强制要求 staff.user.communityId，兼容未分配社区的用户
+        if (communityId != null) {
+            wrapper.eq(ServiceBooking::getCommunityId, communityId);
+        }
         if (StringUtils.hasText(status)) {
             wrapper.eq(ServiceBooking::getStatus, status);
         }

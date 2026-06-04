@@ -49,10 +49,20 @@ const unreadCount = computed(() => notificationStore.unreadCount)
 
 async function handleClick(item: any) {
   await notificationStore.markAsRead(item.id)
+  
+  // 根据消息类型跳转到对应页面，并携带高亮ID
   if (item.relatedType === 'application') {
-    router.push('/application/list')
+    router.push({
+      path: '/application/list',
+      query: { highlightId: item.relatedId }
+    })
   } else if (item.relatedType === 'booking') {
-    router.push('/booking/list')
+    router.push({
+      path: '/booking/list',
+      query: { highlightId: item.relatedId }
+    })
+  } else {
+    router.push('/notice')
   }
 }
 

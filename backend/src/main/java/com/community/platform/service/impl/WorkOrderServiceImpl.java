@@ -57,7 +57,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final UserMapper userMapper;
     private final ApplicationMaterialService applicationMaterialService;
     private final NoticeService noticeService;
-    private final ApplicationService applicationService;  // 仍然 final
+    private final ApplicationService applicationService;
 
     // 显式构造器，在 ApplicationService 参数上添加 @Lazy
     public WorkOrderServiceImpl(WorkOrderMapper workOrderMapper,
@@ -152,7 +152,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         // 3. 社区权限校验：工作人员只能处理本社区工单
         User staff = userMapper.selectById(staffUserId);
-        if (staff != null && "staff".equals(staff.getRole()) && !staff.getCommunityId().equals(order.getCommunityId())) {
+        if (staff != null && "staff".equals(staff.getRole()) && staff.getCommunityId() != null 
+                && order.getCommunityId() != null && !staff.getCommunityId().equals(order.getCommunityId())) {
             throw new BusinessException(ResultCode.NO_PERMISSION, "您无权处理其他社区的工单");
         }
 
@@ -247,7 +248,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         );
     }
 
-    // ==================== 新增方法（工单分配、转派、批量审核等） ====================
+    // ==================== 工单分配、转派、批量审核等 ====================
 
     @Override
     @Transactional
@@ -256,16 +257,28 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         if (order.getStaffUserId() != null) {
             return; // 已分配
         }
-        if (order.getCommunityId() == null) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "工单无社区信息，无法分配");
+        
+        // 方案一：工单没有社区信息时，从所有工作人员中选择（不按社区筛选）
+        Long targetCommunityId = order.getCommunityId();
+        List<User> staffList;
+        
+        if (targetCommunityId == null) {
+            // 无社区信息：查询所有工作人员
+            staffList = userMapper.selectList(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "staff"));
+            if (staffList.isEmpty()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "暂无工作人员，请联系管理员");
+            }
+        } else {
+            // 有社区信息：按社区查询工作人员
+            staffList = userMapper.selectList(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "staff")
+                    .eq(User::getCommunityId, targetCommunityId));
+            if (staffList.isEmpty()) {
+                throw new BusinessException(ResultCode.BAD_REQUEST, "该社区暂无工作人员，请联系管理员");
+            }
         }
-        // 查询同社区、角色为 staff 的用户
-        List<User> staffList = userMapper.selectList(new LambdaQueryWrapper<User>()
-                .eq(User::getRole, "staff")
-                .eq(User::getCommunityId, order.getCommunityId()));
-        if (staffList.isEmpty()) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "该社区暂无工作人员，请联系管理员");
-        }
+        
         // 计算每个工作人员的待处理工单数量
         Map<Long, Long> workload = staffList.stream().collect(Collectors.toMap(
                 User::getUserId,
@@ -273,24 +286,32 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                         .eq(WorkOrder::getStaffUserId, u.getUserId())
                         .in(WorkOrder::getStatus, List.of("pending", "processing")))
         ));
+        
+        // 按工作量最少选择工作人员
         Long assigneeId = staffList.stream()
                 .min(Comparator.comparingLong(u -> workload.getOrDefault(u.getUserId(), 0L)))
                 .map(User::getUserId)
                 .orElse(null);
+        
         if (assigneeId == null) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "无法找到合适的工作人员");
         }
+        
         order.setStaffUserId(assigneeId);
-        // 注意：不要修改状态，保持 pending
         workOrderMapper.updateById(order);
-
+        
+        // 记录分配日志
         WorkOrderLog log = new WorkOrderLog();
         log.setOrderId(orderId);
         log.setOperatorId(assigneeId);
         log.setAction("assign");
         log.setFromStatus("pending");
-        log.setToStatus("pending");  // 状态未变
-        log.setRemark("自动分配工作人员");
+        log.setToStatus("pending");
+        if (targetCommunityId == null) {
+            log.setRemark("自动分配工作人员（工单无社区信息，从全体工作人员中分配）");
+        } else {
+            log.setRemark("自动分配工作人员（社区ID: " + targetCommunityId + "）");
+        }
         workOrderLogMapper.insert(log);
     }
 
@@ -302,21 +323,35 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             return;
         }
         Long oldStaffId = order.getStaffUserId();
-        // 查找同社区其他工作人员，排除当前工作人员
-        List<User> otherStaff = userMapper.selectList(new LambdaQueryWrapper<User>()
-                .eq(User::getRole, "staff")
-                .eq(User::getCommunityId, order.getCommunityId())
-                .ne(oldStaffId != null, User::getUserId, oldStaffId));
+        Long targetCommunityId = order.getCommunityId();
+        
+        // 查找其他工作人员
+        List<User> otherStaff;
+        if (targetCommunityId == null) {
+            // 无社区信息：从所有工作人员中排除当前人员
+            otherStaff = userMapper.selectList(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "staff")
+                    .ne(oldStaffId != null, User::getUserId, oldStaffId));
+        } else {
+            // 有社区信息：从同社区工作人员中排除当前人员
+            otherStaff = userMapper.selectList(new LambdaQueryWrapper<User>()
+                    .eq(User::getRole, "staff")
+                    .eq(User::getCommunityId, targetCommunityId)
+                    .ne(oldStaffId != null, User::getUserId, oldStaffId));
+        }
+        
         if (otherStaff.isEmpty()) {
             // 无其他工作人员，发送管理员告警
             Long adminId = getAdminUserId();
             if (adminId != null) {
-                noticeService.sendNotice(adminId, "工单转派失败",
-                        "工单 #" + orderId + " 超时但无其他工作人员可转派",
-                        "timeout_warning", "work_order", orderId);
+                String warningMsg = targetCommunityId == null 
+                    ? "工单 #" + orderId + " 超时但无其他工作人员可转派（工单无社区信息）"
+                    : "工单 #" + orderId + " 超时但社区 " + targetCommunityId + " 无其他工作人员可转派";
+                noticeService.sendNotice(adminId, "工单转派失败", warningMsg, "timeout_warning", "work_order", orderId);
             }
             return;
         }
+        
         // 按工作量最少选择
         User newStaff = otherStaff.stream()
                 .min(Comparator.comparingLong(u -> workOrderMapper.selectCount(
@@ -324,10 +359,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                                 .eq(WorkOrder::getStaffUserId, u.getUserId())
                                 .in(WorkOrder::getStatus, List.of("pending", "processing")))))
                 .orElse(otherStaff.get(0));
-
+        
         order.setStaffUserId(newStaff.getUserId());
         workOrderMapper.updateById(order);
-
+        
         // 记录转派日志
         WorkOrderLog log = new WorkOrderLog();
         log.setOrderId(orderId);
@@ -335,9 +370,13 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         log.setAction("reassign");
         log.setFromStatus(order.getStatus());
         log.setToStatus(order.getStatus());
-        log.setRemark("超时自动转派，原处理人：" + (oldStaffId == null ? "无" : oldStaffId));
+        String remark = "超时自动转派，原处理人：" + (oldStaffId == null ? "无" : oldStaffId);
+        if (targetCommunityId == null) {
+            remark += "（工单无社区信息）";
+        }
+        log.setRemark(remark);
         workOrderLogMapper.insert(log);
-
+        
         // 发送通知给新工作人员
         noticeService.sendNotice(newStaff.getUserId(), "工单转派通知",
                 "您有一笔超时工单已转派给您，工单号：" + orderId,

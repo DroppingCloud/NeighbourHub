@@ -11,6 +11,18 @@
           <p>智能对话 | 一键办理</p>
         </div>
       </div>
+      <!-- 新增清空按钮 -->
+      <div class="header-right">
+        <el-button
+          type="default"
+          size="small"
+          :icon="Delete"
+          class="clear-btn"
+          @click="clearHistory"
+        >
+          清空记录
+        </el-button>
+      </div>
     </div>
 
     <!-- 常见问题快捷入口 -->
@@ -42,7 +54,7 @@
     <div class="chat-area" ref="chatAreaRef">
       <div v-for="(msg, idx) in messages" :key="idx" class="message" :class="msg.role">
         <div class="message-avatar">
-          <el-avatar v-if="msg.role === 'user'" :size="36" :icon="UserFilled" />
+          <el-avatar v-if="msg.role === 'user'" :size="36" :src="userAvatarSrc" :icon="!userAvatarSrc ? UserFilled : undefined" />
           <div v-else class="ai-avatar">
             <el-icon :size="20"><MagicStick /></el-icon>
           </div>
@@ -132,17 +144,27 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
-  MagicStick, UserFilled, Promotion
+  MagicStick, UserFilled, Promotion, Delete
 } from '@element-plus/icons-vue'
 import { chatGuideStream } from '@/api/guide'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 
 const GUIDE_CHAT_STORAGE_KEY_PREFIX = 'neighbourhub_ai_guide_chat_state'
 
 const APPLICATION_ACTION_ITEMS = ['居住证办理', '老年补贴申请', '老年补贴', '居住证明开具', '居住证明', '低保申请', '低保']
+// Only these items are allowed to surface a "开始办理" action button and route to the application flow.
+const ALLOWED_ACTION_ITEMS = new Set([
+  '居住证办理',
+  '老年补贴申请',
+  '老年补贴',
+  '居住证明开具',
+  '居住证明',
+  '便民证明'
+])
 const BOOKING_ACTION_ITEMS = [
   { keywords: ['助餐服务', '助餐'], type: 'dining' },
   { keywords: ['陪诊服务', '陪诊'], type: 'accompany' },
@@ -171,6 +193,14 @@ const isLoading = ref(false)
 const sessionId = ref(generateSessionId())
 const pendingItemName = ref<string | null>(null)
 const currentStreamingIndex = ref<number | null>(null)
+
+const authStore = useAuthStore()
+const userAvatarSrc = computed(() => {
+  const base = import.meta.env.VITE_API_BASE_URL ?? ''
+  const uid = (authStore.userInfo as any)?.userId
+  if (!uid) return ''
+  return (base || '') + `/api/auth/avatar/${uid}`
+})
 
 const welcomeMessage = `您好！我是AI导办助手 🤖
 
@@ -595,7 +625,7 @@ function analyzeMessage(content: string): { showActions: boolean; actionType: 'b
   const hasBookingTopic = Boolean(bookingItem) && !hasApplicationTopic
 
   const actionType: 'booking' | 'application' = hasBookingTopic && bookingCopyCount >= applicationCopyCount ? 'booking' : 'application'
-  const showActions = actionType === 'booking'
+  let showActions = actionType === 'booking'
     ? hasBookingTopic && bookingCopyCount > 0
     : hasApplicationTopic && applicationCopyCount > 0
   
@@ -628,10 +658,27 @@ function analyzeMessage(content: string): { showActions: boolean; actionType: 'b
     }
   }
   
+  // Resolve the canonical item name candidate and its source
+  const resolvedItem = applicationItem || bookingItem?.keywords[0] || itemName
+  const resolvedSource: 'application' | 'booking' | 'unknown' = applicationItem ? 'application' : (bookingItem ? 'booking' : 'unknown')
+
+  // Only allow the action button for applications when explicitly whitelisted.
+  // Booking actions are allowed when a bookingItem was detected (we support the three booking services).
+  if (resolvedSource === 'application') {
+    if (!resolvedItem || !ALLOWED_ACTION_ITEMS.has(resolvedItem)) {
+      showActions = false
+    }
+  } else if (resolvedSource === 'booking') {
+    // allow booking actions (bookingItem exists)
+    showActions = showActions && Boolean(bookingItem)
+  } else {
+    showActions = false
+  }
+
   return {
     showActions: showActions && !content.includes('您好！我是AI导办助手'),
     actionType,
-    itemName: applicationItem || bookingItem?.keywords[0] || itemName
+    itemName: resolvedItem
   }
 }
 
@@ -806,6 +853,26 @@ function goToBooking(itemName?: string) {
   ElMessage.success('即将跳转到服务预约页面')
 }
 
+// 新增清空历史记录函数
+function clearHistory() {
+  ElMessageBox.confirm('确定要清空所有聊天记录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    // 重置状态
+    messages.value = getDefaultMessages()
+    sessionId.value = generateSessionId()
+    pendingItemName.value = null
+    inputMessage.value = ''
+    // 清除 localStorage
+    localStorage.removeItem(getGuideChatStorageKey())
+    ElMessage.success('聊天记录已清空')
+    // 滚动到底部显示欢迎消息
+    scrollToBottom()
+  }).catch(() => {})
+}
+
 watch(messages, saveGuideChatState, { deep: true })
 watch([sessionId, pendingItemName, inputMessage], saveGuideChatState)
 
@@ -837,8 +904,30 @@ onBeforeUnmount(() => {
   background: linear-gradient(135deg, var(--gold) 0%, #b38a2f 100%);
   color: white;
   flex-shrink: 0;
+  /* 新增 flex 布局 */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
+/* 新增头部右侧样式 */
+.header-right {
+  flex-shrink: 0;
+}
+
+/* 新增清空按钮样式 */
+.clear-btn {
+  color: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  font-size: 13px !important;
+}
+
+.clear-btn:hover {
+  color: white !important;
+  border-color: rgba(255, 255, 255, 0.8) !important;
+  background: rgba(255, 255, 255, 0.22) !important;
+}
 .header-left {
   display: flex;
   align-items: center;
@@ -1240,4 +1329,5 @@ onBeforeUnmount(() => {
     font-size: 13px !important;
   }
 }
+
 </style>

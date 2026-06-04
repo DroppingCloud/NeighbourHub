@@ -34,7 +34,7 @@
 
       <el-dropdown @command="handleCommand">
         <div class="user-info">
-          <el-avatar :size="40" :icon="UserFilled" />
+          <el-avatar :size="40" :src="avatarSrc" :icon="!avatarSrc ? UserFilled : undefined" />
           <span class="username">{{ authStore.userInfo?.username || '用户' }}</span>
           <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
         </div>
@@ -87,7 +87,9 @@ async function handleCommand(command: string) {
       router.push('/settings')
       break
     case 'accessibility':
-      router.push('/accessibility')
+      // open accessibility popover instead of navigating away
+      const el = document.querySelector('.font-size-btn') as HTMLElement
+      if (el) el.click()
       break
     case 'logout':
       try {
@@ -118,6 +120,13 @@ onMounted(() => {
   if (isFamily.value) {
     proxyStore.restoreTarget()
   }
+})
+
+const avatarSrc = computed(() => {
+  const base = import.meta.env.VITE_API_BASE_URL ?? ''
+  const uid = (authStore.userInfo as any)?.userId
+  if (!uid) return ''
+  return (base || '') + `/api/auth/avatar/${uid}`
 })
 </script>
 

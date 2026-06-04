@@ -12,13 +12,13 @@ export interface NoticeVO {
 }
 
 export const getNoticeList = (pageNum = 1, pageSize = 10) =>
-  request.get<any, any>('/api/notice/list', { params: { pageNum, pageSize } })
+  request.get<any, any>('/api/notice/list', { params: { pageNum, pageSize }, headers: { 'X-Skip-Proxy': 'true' } })
 
 export const markNoticeRead = (id: number) =>
-  request.put<any, void>(`/api/notice/${id}/read`)
+  request.put<any, void>(`/api/notice/${id}/read`, undefined, { headers: { 'X-Skip-Proxy': 'true' } })
 
 export const markAllRead = () =>
-  request.put<any, void>('/api/notice/read-all')
+  request.put<any, void>('/api/notice/read-all', undefined, { headers: { 'X-Skip-Proxy': 'true' } })
 
 export const getUnreadCount = () =>
-  request.get<any, number>('/api/notice/unread-count')
+  request.get<any, number>('/api/notice/unread-count', { headers: { 'X-Skip-Proxy': 'true' } })

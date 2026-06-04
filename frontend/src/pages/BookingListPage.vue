@@ -5,8 +5,21 @@
       <p>查看您的社区服务预约记录</p>
     </div>
 
+    <!-- 高亮提示条 -->
+    <div v-if="highlightId" class="highlight-tip">
+      <el-icon><Bell /></el-icon>
+      <span>已为您定位到相关预约记录</span>
+      <el-button link type="primary" @click="clearHighlight">取消高亮</el-button>
+    </div>
+
     <div v-loading="loading" class="booking-list">
-      <div v-for="booking in bookings" :key="booking.bookingId" class="booking-card">
+      <div 
+        v-for="booking in bookings" 
+        :key="booking.bookingId" 
+        :data-id="booking.bookingId"
+        class="booking-card"
+        :class="{ 'highlight-flash': shouldHighlight(booking.bookingId) }"
+      >
         <div class="card-header">
           <div class="service-info">
             <span class="service-name">{{ booking.serviceTypeLabel || booking.serviceType }}</span>
@@ -31,7 +44,7 @@
             <span>{{ booking.remark || '无' }}</span>
           </div>
         </div>
-        <div v-if="booking.staffName">
+        <div v-if="booking.staffName" class="staff-info">
           <span class="label">服务人员：</span>
           <span>{{ booking.staffName }} ({{ booking.staffPhone }})</span>
         </div>
@@ -61,14 +74,39 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Bell } from '@element-plus/icons-vue'
 import { cancelBooking, getBookingList, type BookingVO } from '@/api/booking'
 
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const bookings = ref<BookingVO[]>([])
+const highlightId = ref<string | null>(null)
+
+// 获取需要高亮的ID
+const getHighlightId = () => {
+  const id = route.query.highlightId
+  return id ? String(id) : null
+}
+
+// 判断是否需要高亮
+const shouldHighlight = (id: number) => {
+  return highlightId.value === String(id)
+}
+
+// 清除高亮
+const clearHighlight = () => {
+  highlightId.value = null
+  // 移除URL中的highlightId参数
+  router.replace({ path: '/booking/list', query: {} })
+  // 移除所有高亮样式
+  document.querySelectorAll('.booking-card.highlight-flash').forEach(el => {
+    el.classList.remove('highlight-flash')
+  })
+}
 
 function getStatusType(status: string) {
   const map: Record<string, string> = {
@@ -96,13 +134,49 @@ async function cancel(id: number) {
   await cancelBooking(id)
   ElMessage.success('预约已取消')
   await loadBookings()
+  // 取消后清除高亮
+  clearHighlight()
 }
 
 function goToFeedback(id: number) {
   router.push({ path: '/service-feedback', query: { bookingId: id, mode: 'write' } })
 }
 
-onMounted(loadBookings)
+// 滚动到高亮项并添加高亮效果
+async function scrollToHighlight() {
+  const targetId = getHighlightId()
+  if (!targetId) return
+  
+  highlightId.value = targetId
+  
+  await nextTick()
+  
+  // 查找目标元素
+  const targetElement = document.querySelector(`.booking-card[data-id="${targetId}"]`) as HTMLElement
+  
+  if (targetElement) {
+    // 滚动到目标元素
+    targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    
+    // 5秒后移除高亮（但保留URL参数，刷新页面后还会高亮）
+    setTimeout(() => {
+      const element = document.querySelector(`.booking-card[data-id="${targetId}"]`)
+      if (element) {
+        element.classList.remove('highlight-flash')
+      }
+    }, 5000)
+  } else {
+    // 如果没找到，可能是预约不存在，清除高亮
+    console.warn('未找到要高亮的预约记录:', targetId)
+    clearHighlight()
+  }
+}
+
+onMounted(async () => {
+  await loadBookings()
+  // 加载完成后滚动到高亮项
+  await scrollToHighlight()
+})
 </script>
 
 <style scoped>
@@ -125,6 +199,25 @@ onMounted(loadBookings)
   color: var(--text-muted);
 }
 
+/* 高亮提示条 */
+.highlight-tip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(212, 168, 67, 0.12);
+  border-radius: 0.5rem;
+  border-left: 3px solid var(--gold);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.highlight-tip .el-icon {
+  color: var(--gold);
+  font-size: 1rem;
+}
+
 .booking-list {
   display: flex;
   flex-direction: column;
@@ -137,6 +230,49 @@ onMounted(loadBookings)
   border-radius: var(--radius-md);
   padding: 1.25rem;
   box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 高亮闪烁动画 */
+.booking-card.highlight-flash {
+  animation: highlightBlink 0.5s ease-in-out 3, pulseGlow 1.5s ease-out;
+  background: linear-gradient(90deg, 
+    rgba(212, 168, 67, 0.08) 0%, 
+    rgba(212, 168, 67, 0.2) 50%, 
+    rgba(212, 168, 67, 0.08) 100%);
+  border-left: 3px solid var(--gold);
+}
+
+@keyframes highlightBlink {
+  0% {
+    background: rgba(212, 168, 67, 0.08);
+    transform: scale(1);
+  }
+  50% {
+    background: rgba(212, 168, 67, 0.25);
+    transform: scale(1.01);
+  }
+  100% {
+    background: linear-gradient(90deg, 
+      rgba(212, 168, 67, 0.08) 0%, 
+      rgba(212, 168, 67, 0.2) 50%, 
+      rgba(212, 168, 67, 0.08) 100%);
+    transform: scale(1);
+  }
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(212, 168, 67, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(212, 168, 67, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(212, 168, 67, 0);
+  }
 }
 
 .card-header,
@@ -176,6 +312,14 @@ onMounted(loadBookings)
   flex-direction: column;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.staff-info {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 0.0625rem solid var(--border-color);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
 .info-row {

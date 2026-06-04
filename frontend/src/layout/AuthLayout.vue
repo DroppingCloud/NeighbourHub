@@ -55,15 +55,13 @@ const features = [
   position: relative;
 }
 
-/* 字体控制按钮 - 固定在右上角 */
 .auth-font-control {
   position: fixed;
   top: 1rem;
   right: 1rem;
   z-index: 1000;
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--card-bg); /* 使用主题卡片背景，支持深色模式 */
   border-radius: 2rem;
-  backdrop-filter: blur(4px);
   box-shadow: var(--shadow-sm);
 }
 

@@ -180,9 +180,18 @@ function quickReject(order: WorkOrderVO) {
 }
 
 async function quickDispatch(booking: BookingVO) {
-  await assignBooking(booking.bookingId, Number(authStore.userInfo?.userId || 2))
-  ElMessage.success('已派单')
-  loadWorkbench()
+  try {
+    await assignBooking(booking.bookingId, Number(authStore.userInfo?.userId || 2))
+    ElMessage.success('已派单')
+    loadWorkbench()
+  } catch (err: any) {
+    const msg = err?.message || String(err)
+    if (msg.includes('社区') || msg.includes('无社区')) {
+      ElMessageBox.alert('无法派单：该工单/预约未关联社区信息，系统无法完成自动分配。请联系管理员或在申请详情补全社区后再试。', '派单失败', { type: 'warning' })
+    } else {
+      ElMessage.error(msg || '派单失败')
+    }
+  }
 }
 </script>
 

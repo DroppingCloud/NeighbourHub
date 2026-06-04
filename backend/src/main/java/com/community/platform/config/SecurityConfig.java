@@ -53,10 +53,11 @@ public class SecurityConfig {
                         })
                 )
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/login/sms", "/api/auth/register", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/auth/avatar/**").permitAll()
                         .requestMatchers("/api/statistics/**").hasAnyRole("ADMIN", "STAFF")
                         .requestMatchers("/api/workorder/**").hasAnyRole("STAFF", "ADMIN")
                         .anyRequest().authenticated()

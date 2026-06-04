@@ -132,11 +132,40 @@
         <el-button type="primary" @click="changePassword">确认修改</el-button>
       </template>
     </el-dialog>
+
+    <!-- 用户协议弹窗 -->
+    <el-dialog v-model="showAgreementDialog" title="用户协议" width="700px">
+      <div style="max-height:60vh; overflow:auto;">
+        <h3>智慧社区服务平台 用户协议</h3>
+        <p>欢迎使用智慧社区服务平台。请在使用本平台前仔细阅读本用户协议。您使用本平台即表示同意本协议的全部条款。</p>
+        <p>1. 服务内容：本平台为社区居民和工作人员提供事项申报、预约、通知等在线服务。</p>
+        <p>2. 用户义务：用户应保证提供的信息真实、准确，不得利用本平台从事违法活动。</p>
+        <p>3. 权利与义务、免责声明等条款请在部署到生产环境时替换为法律部门审核的正式文本。</p>
+      </div>
+      <template #footer>
+        <el-button @click="showAgreementDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 隐私政策弹窗 -->
+    <el-dialog v-model="showPrivacyDialog" title="隐私政策" width="700px">
+      <div style="max-height:60vh; overflow:auto;">
+        <h3>隐私政策</h3>
+        <p>我们重视您的隐私。平台会在获得您的授权后处理必要的个人信息，以便提供服务。</p>
+        <p>1. 我们收集的信息类型：注册信息（姓名、手机号等）、头像、申请材料等。</p>
+        <p>2. 使用目的：为提供申请、预约、通知等功能并进行安全审计。</p>
+        <p>3. 数据保留与删除：用户可通过“注销账号”删除其个人数据（不可恢复）。</p>
+        <p>4. 本政策为示例文本，生产环境请替换为合规的隐私条款。</p>
+      </div>
+      <template #footer>
+        <el-button @click="showPrivacyDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Monitor, Bell, Lock, InfoFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -148,11 +177,15 @@ import {
   applyAppFontSize,
   currentAppFontSize
 } from '@/composables/useFontSize'
+import { useSettingsStore } from '@/stores/settings'
+import { changePassword as apiChangePassword, deleteAccount as apiDeleteAccount } from '@/api/auth'
 
 const authStore = useAuthStore()
 const router = useRouter()
 
 const showChangePwdDialog = ref(false)
+const showAgreementDialog = ref(false)
+const showPrivacyDialog = ref(false)
 const pwdFormRef = ref()
 const currentFontSize = currentAppFontSize
 
@@ -166,10 +199,14 @@ function applyTheme(isDark: boolean) {
   }
 }
 
+const settingsStore = useSettingsStore()
 const settings = reactive({
-  darkMode: false,
-  notification: true,
-  sound: false
+  get darkMode() { return settingsStore.darkMode },
+  set darkMode(v: boolean) { settingsStore.darkMode = v },
+  get notification() { return settingsStore.notification },
+  set notification(v: boolean) { settingsStore.notification = v },
+  get sound() { return settingsStore.sound },
+  set sound(v: boolean) { settingsStore.sound = v }
 })
 
 const pwdForm = reactive({
@@ -197,21 +234,8 @@ const pwdRules = {
 }
 
 function loadSettings() {
-  const saved = localStorage.getItem('app-settings')
-  if (saved) {
-    const data = JSON.parse(saved)
-    settings.darkMode = data.darkMode || false
-    settings.notification = data.notification !== false
-    settings.sound = data.sound || false
-  } else {
-    // 检测系统主题偏好
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    settings.darkMode = prefersDark
-  }
-  
-  // 应用深色模式
+  // settings loaded via settingsStore on import
   applyTheme(settings.darkMode)
-  
   const fontSize = localStorage.getItem('app-font-size')
   if (fontSize) {
     currentFontSize.value = applyAppFontSize(parseInt(fontSize))
@@ -219,11 +243,7 @@ function loadSettings() {
 }
 
 function saveSettings() {
-  localStorage.setItem('app-settings', JSON.stringify({
-    darkMode: settings.darkMode,
-    notification: settings.notification,
-    sound: settings.sound
-  }))
+  settingsStore.save()
 }
 
 // 切换深色模式
@@ -253,11 +273,16 @@ function resetFontQuick() {
 function changePassword() {
   pwdFormRef.value?.validate(async (valid: boolean) => {
     if (!valid) return
-    await new Promise(r => setTimeout(r, 500))
-    ElMessage.success('密码修改成功，请重新登录')
-    showChangePwdDialog.value = false
-    authStore.logout()
-    router.push('/login')
+    try {
+      await apiChangePassword({ oldPassword: pwdForm.oldPassword, newPassword: pwdForm.newPassword, confirmPassword: pwdForm.confirmPassword })
+      ElMessage.success('密码修改成功，请重新登录')
+      showChangePwdDialog.value = false
+      // logout and redirect
+      await authStore.logout()
+      router.push('/login')
+    } catch (err: any) {
+      ElMessage.error(err?.message || '修改密码失败')
+    }
   })
 }
 
@@ -267,22 +292,31 @@ function showLogoutConfirm() {
     cancelButtonText: '取消',
     type: 'error'
   }).then(() => {
-    ElMessage.success('账号已注销')
-    authStore.logout()
-    router.push('/login')
+    // call backend to delete account
+    apiDeleteAccount().then(async () => {
+      ElMessage.success('账号已注销')
+      await authStore.logout()
+      router.push('/login')
+    }).catch((err: any) => {
+      ElMessage.error(err?.message || '注销失败')
+    })
   }).catch(() => {})
 }
 
 function showAgreement() {
-  ElMessage.info('用户协议内容开发中')
+  showAgreementDialog.value = true
 }
 
 function showPrivacy() {
-  ElMessage.info('隐私政策内容开发中')
+  showPrivacyDialog.value = true
 }
 
 onMounted(() => {
   loadSettings()
+  // watch settings and persist when changed
+  watch(() => settings.darkMode, () => saveSettings())
+  watch(() => settings.notification, () => saveSettings())
+  watch(() => settings.sound, () => saveSettings())
 })
 </script>
 

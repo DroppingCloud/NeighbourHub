@@ -12,7 +12,7 @@ import lombok.Data;
 public class RegisterDTO {
 
     @NotBlank(message = "用户名不能为空")
-    @Size(min = 3, max = 20, message = "用户名长度需在3-20位之间")
+    @Size(min = 1, max = 15, message = "用户名长度需在1-15位之间")
     private String username;
 
     @NotBlank(message = "密码不能为空")
@@ -27,4 +27,10 @@ public class RegisterDTO {
 
     @Pattern(regexp = "^\\d{17}[\\dXx]$", message = "身份证号格式不正确")
     private String idCard;
+
+    /** optional system assigned account */
+    private String account;
+
+    /** optional role: resident | staff | admin */
+    private String role;
 }

@@ -125,8 +125,7 @@ onMounted(() => {
 
 .font-size-btn {
   border: none;
-  background: rgba(255, 255, 255, 0.9);  /* 添加半透明白背景 */
-  backdrop-filter: blur(4px);             /* 毛玻璃效果 */
+  background: var(--card-bg); /* 使用主题卡片背景，支持深色模式 */
   width: 2.5rem;                          /* 稍小一点，40px */
   height: 2.5rem;
   border-radius: 50%;
@@ -256,7 +255,7 @@ onMounted(() => {
   width: 1.125rem;
   height: 1.125rem;
   border: 0.1875rem solid var(--gold);
-  background-color: #fff;
+  background-color: var(--card-bg);
 }
 
 .font-size-slider :deep(.el-slider__marks) {
@@ -303,9 +302,8 @@ onMounted(() => {
   padding-top: 0.5rem;
 }
 
-.font-size-tip {
-  display: flex;
-  align-items: center;
+.font-size-preview {
+  background: var(--cloud);
   gap: 0.375rem;
   font-size: 0.6875rem;
   color: var(--text-muted);
@@ -313,8 +311,8 @@ onMounted(() => {
   border-top: 0.0625rem solid var(--border-soft);
 }
 
-.font-size-tip .el-icon {
-  font-size: 0.75rem;
+.preview-text {
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 

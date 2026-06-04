@@ -16,4 +16,6 @@ public class ProfileUpdateDTO {
     private LocalDate birthday;
 
     private String address;
+    /** 可选：头像相对路径或 URL */
+    private String avatar;
 }
