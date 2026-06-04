@@ -5,6 +5,7 @@ import { getProxyRelations, type ProxyRelationVO } from '@/api/user'
 export interface ProxyTarget {
   id: number          // 绑定关系ID
   profileId: number   // 被代理人档案ID
+  targetUserId: number // 被代理人用户ID（用于 _proxyFor 参数）
   name: string        // 被代理人姓名（从档案获取）
   relation: string    // 关系
   authorizedActions: string  // 授权范围
@@ -26,6 +27,7 @@ export const useProxyStore = defineStore('proxy', () => {
       .map(item => ({
         id: item.id,
         profileId: item.targetProfileId!,
+        targetUserId: item.targetUserId!,
         name: item.targetProfileName || `被代理人${item.targetProfileId}`,
         relation: item.relation || '家属',
         authorizedActions: item.authorizedActions || ''

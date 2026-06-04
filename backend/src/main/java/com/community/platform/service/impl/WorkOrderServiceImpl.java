@@ -87,21 +87,24 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     @Override
     public Page<WorkOrderVO> getList(WorkOrderQueryDTO query) {
         LambdaQueryWrapper<WorkOrder> wrapper = new LambdaQueryWrapper<>();
-        
+
         // 状态过滤：如果前端传了 status，则精确匹配；否则查询 pending 和 processing
         if (StringUtils.hasText(query.getStatus())) {
             wrapper.eq(WorkOrder::getStatus, query.getStatus());
         } else {
             wrapper.in(WorkOrder::getStatus, List.of("pending", "processing"));
         }
-        
+
         wrapper.eq(query.getStaffUserId() != null, WorkOrder::getStaffUserId, query.getStaffUserId())
                .orderByDesc(WorkOrder::getCreateTime);
 
         // 社区数据隔离 - 工作人员只能看到本社区的工单
-        User currentUser = SecurityUtils.getCurrentUser();
-        if (currentUser != null && "staff".equals(currentUser.getRole()) && currentUser.getCommunityId() != null) {
-            wrapper.eq(WorkOrder::getCommunityId, currentUser.getCommunityId());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        if (currentUserId != null) {
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser != null && "staff".equals(currentUser.getRole()) && currentUser.getCommunityId() != null) {
+                wrapper.eq(WorkOrder::getCommunityId, currentUser.getCommunityId());
+            }
         }
 
         Page<WorkOrder> page = workOrderMapper.selectPage(new Page<>(page(query.getPageNum()), size(query.getPageSize())), wrapper);
@@ -224,10 +227,14 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     @Override
     public Map<String, Long> getStats() {
-        User currentUser = SecurityUtils.getCurrentUser();
-        Long communityId = currentUser != null && "staff".equals(currentUser.getRole())
-                ? currentUser.getCommunityId()
-                : null;
+        Long communityId = null;
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        if (currentUserId != null) {
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser != null && "staff".equals(currentUser.getRole())) {
+                communityId = currentUser.getCommunityId();
+            }
+        }
 
         long pending = countByStatus("pending", communityId);
         long processing = countByStatus("processing", communityId);

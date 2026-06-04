@@ -2,11 +2,12 @@
   <div class="page-container">
     <div class="page-header">
       <h2>家属代办</h2>
-      <p>管理家属代办授权关系</p>
+      <p v-if="isFamily">管理家属代办授权关系</p>
+      <p v-else>管理他人代办授权</p>
     </div>
 
-    <!-- 显示当前代办状态 -->
-    <div v-if="proxyStore.currentTarget" class="current-proxy-banner">
+    <!-- 显示当前代办状态（仅家属） -->
+    <div v-if="isFamily && proxyStore.currentTarget" class="current-proxy-banner">
       <span>当前正在为 <strong>{{ proxyStore.currentTarget.name }}</strong> 代办事务</span>
       <el-button size="small" @click="exitProxy">退出代办</el-button>
     </div>
@@ -101,12 +102,15 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   getProxyRelations,
+  getPendingRequests,
+  confirmProxy,
+  rejectProxy,
   revokeProxyRelation,
   applyProxy,
   getPendingRequests,
@@ -115,12 +119,15 @@ import {
   type ProxyRelationVO
 } from '@/api/user'
 import { useProxyStore } from '@/stores/proxy'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const proxyStore = useProxyStore()
 
 // --- 数据定义 ---
 const familyBindings = ref<ProxyRelationVO[]>([])
+const pendingRequests = ref<ProxyRelationVO[]>([])
+const myProxies = ref<ProxyRelationVO[]>([])
 const pendingRequests = ref<any[]>([])
 const loadingBindings = ref(false)
 const loadingRequests = ref(false)

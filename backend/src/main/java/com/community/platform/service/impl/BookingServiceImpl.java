@@ -34,12 +34,18 @@ public class BookingServiceImpl implements BookingService {
     private final UserMapper userMapper;                 // 新增
     private final com.community.platform.mapper.UserRoleMapper userRoleMapper;
     private final ResidentProfileMapper residentProfileMapper; // 新增
+    private final com.community.platform.service.ProxyPermissionService proxyPermissionService;
 
     // ==================== 原有方法（保留并增强） ====================
 
     @Override
     @Transactional
     public Long create(Long userId, BookingDTO dto) {
+        // 代办权限校验
+        if (dto.getProxyFor() != null) {
+            proxyPermissionService.validateProxyPermission(userId, dto.getProxyFor(), "booking");
+        }
+
         if (!SERVICE_TYPES.contains(dto.getServiceType())) {
             throw new BusinessException(ResultCode.SERVICE_NOT_AVAILABLE);
         }
@@ -75,6 +81,8 @@ public class BookingServiceImpl implements BookingService {
     public Page<BookingVO> getList(Long userId, Integer pageNum, Integer pageSize, Long proxyFor) {
         LambdaQueryWrapper<ServiceBooking> wrapper = new LambdaQueryWrapper<>();
         if (proxyFor != null) {
+            // 校验代理权限
+            proxyPermissionService.validateProxyPermission(userId, proxyFor, "query");
             // 家属代办模式：查询为该被代理人预约的记录
             wrapper.eq(ServiceBooking::getProxyUserId, proxyFor);
         } else {

@@ -13,7 +13,9 @@ export interface ProxyBindRequest {
 export interface ProxyRelationVO extends ProxyBindRequest {
   id: number
   proxyUserId: number
+  targetUserId?: number
   targetProfileName?: string
+  proxyUserName?: string
   status: string
   createTime: string
   updateTime: string
