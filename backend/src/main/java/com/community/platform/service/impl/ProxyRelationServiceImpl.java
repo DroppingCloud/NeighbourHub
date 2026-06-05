@@ -19,6 +19,10 @@ import com.community.platform.entity.ResidentProfile;
 import com.community.platform.entity.User;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -72,10 +76,49 @@ public class ProxyRelationServiceImpl implements ProxyRelationService {
 
     @Override
     public List<ProxyRelation> getPendingRequests(Long targetUserId) {
-        return proxyRelationMapper.selectList(new LambdaQueryWrapper<ProxyRelation>()
+        List<ProxyRelation> relations = proxyRelationMapper.selectList(new LambdaQueryWrapper<ProxyRelation>()
                 .eq(ProxyRelation::getTargetUserId, targetUserId)
                 .eq(ProxyRelation::getStatus, "pending")
                 .orderByDesc(ProxyRelation::getCreateTime));
+        return enrichProxyRelationMetadata(relations);
+    }
+
+    @Override
+    public List<ProxyRelation> getList(Long proxyUserId) {
+        List<ProxyRelation> relations = proxyRelationMapper.selectList(new LambdaQueryWrapper<ProxyRelation>()
+                .eq(ProxyRelation::getProxyUserId, proxyUserId)
+                .orderByDesc(ProxyRelation::getCreateTime));
+        return enrichProxyRelationMetadata(relations);
+    }
+
+    private List<ProxyRelation> enrichProxyRelationMetadata(List<ProxyRelation> relations) {
+        if (relations == null || relations.isEmpty()) {
+            return relations;
+        }
+        Set<Long> profileIds = relations.stream()
+                .map(ProxyRelation::getTargetProfileId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> userIds = relations.stream()
+                .map(ProxyRelation::getProxyUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, String> profileNames = profileIds.isEmpty() ? Map.of() : residentProfileMapper.selectList(new LambdaQueryWrapper<ResidentProfile>()
+                .in(ResidentProfile::getProfileId, profileIds))
+                .stream().collect(Collectors.toMap(ResidentProfile::getProfileId, ResidentProfile::getRealName));
+        Map<Long, String> userNames = userIds.isEmpty() ? Map.of() : userMapper.selectBatchIds(userIds)
+                .stream().collect(Collectors.toMap(User::getUserId, User::getUsername));
+
+        relations.forEach(relation -> {
+            if (relation.getTargetProfileId() != null) {
+                relation.setTargetProfileName(profileNames.get(relation.getTargetProfileId()));
+            }
+            if (relation.getProxyUserId() != null) {
+                relation.setProxyUserName(userNames.get(relation.getProxyUserId()));
+            }
+        });
+        return relations;
     }
 
     @Override
@@ -131,13 +174,6 @@ public class ProxyRelationServiceImpl implements ProxyRelationService {
         relation.setStatus("active");
         proxyRelationMapper.insert(relation);
         return relation.getId();
-    }
-
-    @Override
-    public List<ProxyRelation> getList(Long proxyUserId) {
-        return proxyRelationMapper.selectList(new LambdaQueryWrapper<ProxyRelation>()
-                .eq(ProxyRelation::getProxyUserId, proxyUserId)
-                .orderByDesc(ProxyRelation::getCreateTime));
     }
 
     @Override

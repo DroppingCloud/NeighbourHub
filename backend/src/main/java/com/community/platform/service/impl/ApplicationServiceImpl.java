@@ -77,10 +77,12 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         ServiceItem item = requireOnlineItem(dto.getItemId());
 
+        Long targetUserId = dto.getProxyFor() != null ? dto.getProxyFor() : userId;
+
         ApplicationForm application = new ApplicationForm();
-        application.setUserId(userId);
+        application.setUserId(targetUserId);
         application.setItemId(dto.getItemId());
-        application.setProxyUserId(dto.getProxyUserId());
+        application.setProxyUserId(dto.getProxyFor() != null ? userId : null);
         application.setStatus("pending");
         application.setFormData(toJson(dto.getFormData()));
         application.setRemark(dto.getRemark());
@@ -90,20 +92,13 @@ public class ApplicationServiceImpl implements ApplicationService {
         WorkOrder order = new WorkOrder();
         order.setApplicationId(application.getApplicationId());
         order.setStatus("pending");
-        // 获取社区ID：优先从申请人的居民档案获取，否则从用户获取
+        // 获取社区ID：优先从申请对象的居民档案获取，否则从用户获取
         Long communityId = resolveCommunityId(application);
         order.setCommunityId(communityId);
         workOrderMapper.insert(order);
 
         // 自动分配工作人员
         workOrderService.assign(order.getOrderId());
-
-        if (dto.getProxyFor() != null) {
-            application.setProxyUserId(dto.getProxyFor());  // 被代理人
-        } else {
-            application.setProxyUserId(null);
-        }
-        application.setUserId(userId);  // 当前操作人（家属或本人）
 
         noticeService.sendNotice(
                 userId,
@@ -121,7 +116,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (proxyFor != null) {
             // 校验代理权限
             proxyPermissionService.validateProxyPermission(userId, proxyFor, "query");
-            wrapper.eq(ApplicationForm::getProxyUserId, proxyFor);
+            wrapper.eq(ApplicationForm::getUserId, proxyFor);
         } else {
             wrapper.and(w -> w.eq(ApplicationForm::getUserId, userId)
                              .or().eq(ApplicationForm::getProxyUserId, userId));

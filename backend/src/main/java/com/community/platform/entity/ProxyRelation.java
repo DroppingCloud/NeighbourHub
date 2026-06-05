@@ -25,6 +25,12 @@ public class ProxyRelation {
 
     private Long targetProfileId;
 
+    @TableField(exist = false)
+    private String targetProfileName;
+
+    @TableField(exist = false)
+    private String proxyUserName;
+
     private String relation;
 
     private String authorizedActions;

@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 
 import java.time.LocalDateTime;
 import java.util.Set;
@@ -41,16 +42,17 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public Long create(Long userId, BookingDTO dto) {
+        Long targetUserId = dto.getProxyFor() != null ? dto.getProxyFor() : userId;
         // 代办权限校验
         if (dto.getProxyFor() != null) {
-            proxyPermissionService.validateProxyPermission(userId, dto.getProxyFor(), "booking");
+            proxyPermissionService.validateProxyPermission(userId, targetUserId, "booking");
         }
 
         if (!SERVICE_TYPES.contains(dto.getServiceType())) {
             throw new BusinessException(ResultCode.SERVICE_NOT_AVAILABLE);
         }
         long conflicts = serviceBookingMapper.selectCount(new LambdaQueryWrapper<ServiceBooking>()
-                .eq(ServiceBooking::getUserId, userId)
+                .eq(ServiceBooking::getUserId, targetUserId)
                 .eq(ServiceBooking::getServiceType, dto.getServiceType())
                 .eq(ServiceBooking::getExpectTime, dto.getExpectTime())
                 .in(ServiceBooking::getStatus, "pending", "confirmed", "in_progress"));
@@ -59,12 +61,20 @@ public class BookingServiceImpl implements BookingService {
         }
 
         // 获取社区ID
-        Long communityId = resolveCommunityId(userId, dto.getProfileId());
+        Long communityId = resolveCommunityId(targetUserId, dto.getProfileId());
 
         ServiceBooking booking = new ServiceBooking();
-        booking.setUserId(userId);
-        booking.setProfileId(dto.getProfileId());
-        booking.setProxyUserId(dto.getProxyFor());  
+        booking.setUserId(targetUserId);
+        if (dto.getProfileId() != null) {
+            booking.setProfileId(dto.getProfileId());
+        } else if (dto.getProxyFor() != null) {
+            ResidentProfile profile = residentProfileMapper.selectOne(new LambdaQueryWrapper<ResidentProfile>()
+                    .eq(ResidentProfile::getUserId, targetUserId));
+            if (profile != null) {
+                booking.setProfileId(profile.getProfileId());
+            }
+        }
+        booking.setProxyUserId(dto.getProxyFor() != null ? userId : null);
         booking.setServiceType(dto.getServiceType());
         booking.setExpectTime(dto.getExpectTime());
         booking.setAddress(dto.getAddress());
@@ -73,7 +83,7 @@ public class BookingServiceImpl implements BookingService {
         booking.setCommunityId(communityId);
         serviceBookingMapper.insert(booking);
 
-        noticeService.sendNotice(userId, "预约已提交", "您的社区服务预约已提交，等待确认。", "booking", "booking", booking.getBookingId());
+        noticeService.sendNotice(targetUserId, "预约已提交", "您的社区服务预约已提交，等待确认。", "booking", "booking", booking.getBookingId());
         return booking.getBookingId();
     }
 
@@ -84,7 +94,7 @@ public class BookingServiceImpl implements BookingService {
             // 校验代理权限
             proxyPermissionService.validateProxyPermission(userId, proxyFor, "query");
             // 家属代办模式：查询为该被代理人预约的记录
-            wrapper.eq(ServiceBooking::getProxyUserId, proxyFor);
+            wrapper.eq(ServiceBooking::getUserId, proxyFor);
         } else {
             // 居民本人模式：查询自己提交的 或 别人代自己预约的记录
             wrapper.and(w -> w.eq(ServiceBooking::getUserId, userId)
@@ -135,38 +145,34 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public void assign(Long operatorId, Long bookingId, Long staffUserId) {
-        // 校验操作者权限（必须是 staff 或 admin）
-        User operator = userMapper.selectById(operatorId);
-        if (operator == null || (!"staff".equals(operator.getRole()) && !"admin".equals(operator.getRole()))) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "无权派单");
+    public void claim(Long staffUserId, Long bookingId) {
+        // 校验操作者身份为 staff
+        User staff = userMapper.selectById(staffUserId);
+        if (staff == null || !"staff".equals(staff.getRole())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "只有工作人员可以接取预约");
         }
         ServiceBooking booking = requireBooking(bookingId);
         // 社区隔离：仅在双方都配置了 communityId 时生效
-        if (operator.getCommunityId() != null && booking.getCommunityId() != null
-                && !operator.getCommunityId().equals(booking.getCommunityId())) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "只能派单本社区的预约");
+        if (staff.getCommunityId() != null && booking.getCommunityId() != null
+                && !staff.getCommunityId().equals(booking.getCommunityId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "只能接取本社区的预约");
         }
         // 状态必须是 pending
         if (!"pending".equals(booking.getStatus())) {
-            throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "只有待调度状态的预约可以派单");
+            throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "只有待调度的预约可以接取");
         }
-        // 校验目标服务人员存在且同社区、角色为 staff
-        User staff = userMapper.selectById(staffUserId);
-        if (staff == null || !"staff".equals(staff.getRole())) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "服务人员不存在或无效");
+        // 使用乐观更新，确保只有第一个成功的工作人员能接取该预约
+        int updated = serviceBookingMapper.update(null, new LambdaUpdateWrapper<ServiceBooking>()
+                .eq(ServiceBooking::getBookingId, bookingId)
+                .isNull(ServiceBooking::getStaffUserId)
+                .eq(ServiceBooking::getStatus, "pending")
+                .set(ServiceBooking::getStaffUserId, staffUserId)
+                .set(ServiceBooking::getStatus, "confirmed"));
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "该预约已被其他工作人员接取");
         }
-        if (staff.getCommunityId() != null && booking.getCommunityId() != null
-                && !staff.getCommunityId().equals(booking.getCommunityId())) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "服务人员不属于本社区");
-        }
-        // 派单
-        booking.setStaffUserId(staffUserId);
-        booking.setStatus("confirmed");
-        serviceBookingMapper.updateById(booking);
-        // 发送通知
-        noticeService.sendNotice(booking.getUserId(), "预约已派单", 
-            "您的预约已分配工作人员：" + staff.getUsername(), "booking", "booking", bookingId);
+        // 发送通知给居民
+        noticeService.sendNotice(booking.getUserId(), "预约已被接取", "您的预约已被工作人员接取，工作人员将按时上门服务。", "booking", "booking", bookingId);
     }
 
     @Override
@@ -250,7 +256,19 @@ public class BookingServiceImpl implements BookingService {
             wrapper.eq(ServiceBooking::getCommunityId, communityId);
         }
         if (StringUtils.hasText(status)) {
-            wrapper.eq(ServiceBooking::getStatus, status);
+            // pending: 未被任何工作人员接取的预约
+            if ("pending".equals(status)) {
+                wrapper.eq(ServiceBooking::getStatus, "pending");
+                wrapper.isNull(ServiceBooking::getStaffUserId);
+            } else {
+                // 其它状态：只返回属于当前工作人员的记录
+                wrapper.eq(ServiceBooking::getStatus, status);
+                wrapper.eq(ServiceBooking::getStaffUserId, staffUserId);
+            }
+        } else {
+            // 未提供状态时：返回未接取的 pending，以及当前工作人员自己的已接取记录
+            wrapper.and(w -> w.eq(ServiceBooking::getStatus, "pending").isNull(ServiceBooking::getStaffUserId)
+                    .or(e -> e.eq(ServiceBooking::getStaffUserId, staffUserId)));
         }
 
         Page<ServiceBooking> page = serviceBookingMapper.selectPage(
@@ -322,6 +340,14 @@ public class BookingServiceImpl implements BookingService {
             if (staff != null) {
                 vo.setStaffName(staff.getUsername());
                 vo.setStaffPhone(staff.getPhone());
+            }
+        }
+        // 代办信息
+        vo.setIsProxy(booking.getProxyUserId() != null);
+        if (booking.getProxyUserId() != null) {
+            User proxy = userMapper.selectById(booking.getProxyUserId());
+            if (proxy != null) {
+                vo.setProxyUserName(proxy.getUsername());
             }
         }
         return vo;

@@ -44,9 +44,9 @@ public class ProxyRelationController {
         return Result.success();
     }
 
-    @Operation(summary = "家属发起绑定申请（仅家属角色可调用）")
+    @Operation(summary = "发起绑定申请（居民或家属可调用）")
     @PostMapping("/apply")
-    @PreAuthorize("hasRole('FAMILY')")
+    @PreAuthorize("hasAnyRole('RESIDENT','FAMILY')")
     public Result<Long> apply(@AuthenticationPrincipal Long userId,
                           @Valid @RequestBody ProxyApplyDTO dto) {
         return Result.success(proxyRelationService.apply(userId, dto));

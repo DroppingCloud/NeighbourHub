@@ -11,66 +11,65 @@
       <el-button size="small" @click="exitProxy">退出代办</el-button>
     </div>
 
-    <!-- 已有绑定关系列表 -->
-    <div class="binding-section">
-      <h3>我的家属绑定</h3>
-      <div class="binding-list">
-        <div v-for="binding in familyBindings" :key="binding.id" class="binding-card">
-          <div class="binding-info">
-            <div class="resident-name">
-              {{ binding.targetProfileName || `档案 ${binding.targetProfileId}` }}
+    <!-- 使用 el-tabs 实现分页效果 -->
+    <el-tabs v-model="activeTab" class="proxy-tabs">
+      <!-- 我的家属绑定 Tab -->
+      <el-tab-pane label="我的家属绑定" name="bindings">
+        <div class="binding-list">
+          <div v-for="binding in familyBindings" :key="binding.id" class="binding-card">
+            <div class="binding-info">
+              <div class="resident-name">
+                {{ binding.targetProfileName || `档案 ${binding.targetProfileId}` }}
+              </div>
+              <div class="binding-detail">
+                <el-tag size="small">{{ binding.relation || '亲属' }}</el-tag>
+                <el-tag size="small" :type="binding.status === 'active' ? 'success' : 'info'">
+                  {{ statusText(binding.status) }}
+                </el-tag>
+                <span class="bind-time">授权范围：{{ binding.authorizedActions || 'application,booking,notice' }}</span>
+              </div>
             </div>
-            <div class="binding-detail">
-              <el-tag size="small">{{ binding.relation || '亲属' }}</el-tag>
-              <el-tag size="small" :type="binding.status === 'active' ? 'success' : 'info'">
-                {{ statusText(binding.status) }}
-              </el-tag>
-              <span class="bind-time">授权范围：{{ binding.authorizedActions || 'application,booking,notice' }}</span>
+            <div class="card-actions">
+              <el-button v-if="binding.status === 'active'" type="primary" link @click="switchToProxy(binding)">
+                切换
+              </el-button>
+              <el-button v-if="binding.status === 'active'" type="danger" link @click="revoke(binding.id)">
+                解绑
+              </el-button>
             </div>
           </div>
-          <div class="card-actions">
-            <!-- 切换按钮（仅对已生效的绑定显示） -->
-            <el-button v-if="binding.status === 'active'" type="primary" link @click="switchToProxy(binding)">
-              切换
-            </el-button>
-            <!-- 解绑按钮 -->
-            <el-button v-if="binding.status === 'active'" type="danger" link @click="revoke(binding.id)">
-              解绑
-            </el-button>
-          </div>
+          <el-empty v-if="!loadingBindings && familyBindings.length === 0" description="暂无家属绑定关系" />
         </div>
-        <el-empty v-if="!loadingBindings && familyBindings.length === 0" description="暂无家属绑定关系" />
-      </div>
-    </div>
+      </el-tab-pane>
 
-    <!-- 待确认的绑定申请 -->
-    <div class="pending-section">
-      <h3>待确认的绑定申请</h3>
-      <div class="request-list">
-        <div v-for="req in pendingRequests" :key="req.id" class="request-card">
-          <div class="request-info">
-            <span class="request-user">申请人：{{ req.proxyUserName }}</span>
-            <span class="request-relation">关系：{{ req.relation }}</span>
-            <span class="request-actions">授权范围：{{ req.authorizedActions }}</span>
+      <!-- 待确认的绑定申请 Tab -->
+      <el-tab-pane label="待确认的申请" name="requests">
+        <div class="request-list">
+          <div v-for="req in pendingRequests" :key="req.id" class="request-card">
+            <div class="request-info">
+              <span class="request-user">申请人：{{ req.proxyUserName }}</span>
+              <span class="request-relation">关系：{{ req.relation }}</span>
+              <span class="request-actions">授权范围：{{ req.authorizedActions }}</span>
+            </div>
+            <div class="request-buttons">
+              <el-button type="primary" size="small" @click="confirm(req.id)">同意</el-button>
+              <el-button type="danger" size="small" @click="reject(req.id)">拒绝</el-button>
+            </div>
           </div>
-          <div class="request-buttons">
-            <el-button type="primary" size="small" @click="confirm(req.id)">同意</el-button>
-            <el-button type="danger" size="small" @click="reject(req.id)">拒绝</el-button>
-          </div>
+          <el-empty v-if="!loadingRequests && pendingRequests.length === 0" description="暂无待确认申请" />
         </div>
-        <el-empty v-if="!loadingRequests && pendingRequests.length === 0" description="暂无待确认申请" />
-      </div>
-    </div>
+      </el-tab-pane>
+    </el-tabs>
 
-    <!-- 添加绑定按钮 -->
-    <div class="add-binding">
+    <!-- 添加绑定按钮 - 仅在“我的家属绑定”选项卡时显示 -->
+    <div v-if="activeTab === 'bindings'" class="add-binding">
       <el-button type="primary" plain @click="showAddDialog = true">
         <el-icon><Plus /></el-icon>
         添加家属绑定
       </el-button>
     </div>
 
-    <!-- 添加绑定对话框 -->
+    <!-- 添加绑定对话框（保持不变） -->
     <el-dialog v-model="showAddDialog" title="添加家属绑定" width="500px">
       <el-form :model="newBinding" label-width="7rem">
         <el-form-item label="真实姓名" required>
@@ -120,6 +119,7 @@ const router = useRouter()
 const proxyStore = useProxyStore()
 
 // --- 数据定义 ---
+const activeTab = ref('bindings') // 当前激活的 Tab
 const familyBindings = ref<ProxyRelationVO[]>([])
 const pendingRequests = ref<any[]>([])
 const loadingBindings = ref(false)
@@ -150,22 +150,21 @@ async function loadBindings() {
   loadingBindings.value = true
   try {
     familyBindings.value = await getProxyRelations()
-    // 同步更新 proxyStore 中的 targets 列表（用于头部下拉菜单等）
     const activeBindings = familyBindings.value.filter(b => b.status === 'active')
-    // 注意：proxyStore.targets 可能是 ref，需根据实际 store 定义赋值
     if (proxyStore.targets && typeof proxyStore.targets === 'object' && 'value' in proxyStore.targets) {
       proxyStore.targets.value = activeBindings.map(b => ({
         id: b.id,
         profileId: b.targetProfileId!,
+        targetUserId: b.targetUserId!,
         name: b.targetProfileName || `档案 ${b.targetProfileId}`,
         relation: b.relation || '家属',
         authorizedActions: b.authorizedActions || ''
       }))
     } else if (Array.isArray(proxyStore.targets)) {
-      // 如果 proxyStore.targets 是普通数组直接替换（视具体实现而定）
       proxyStore.targets.splice(0, proxyStore.targets.length, ...activeBindings.map(b => ({
         id: b.id,
         profileId: b.targetProfileId!,
+        targetUserId: b.targetUserId!,
         name: b.targetProfileName || `档案 ${b.targetProfileId}`,
         relation: b.relation || '家属',
         authorizedActions: b.authorizedActions || ''
@@ -200,7 +199,6 @@ async function addBinding() {
     await applyProxy(newBinding.value)
     ElMessage.success('绑定申请已提交，等待对方确认')
     showAddDialog.value = false
-    // 重置表单
     newBinding.value = {
       realName: '',
       idCard: '',
@@ -208,6 +206,7 @@ async function addBinding() {
       authorizedActions: 'application,booking,notice'
     }
     await loadBindings()
+    await loadRequests()
   } catch (error: any) {
     ElMessage.error(error.message || '提交申请失败')
   } finally {
@@ -224,7 +223,6 @@ async function revoke(id: number) {
   try {
     await revokeProxyRelation(id)
     ElMessage.success('已解除绑定')
-    // 如果当前代办的目标恰好是被解绑的，则自动退出代办模式
     if (proxyStore.currentTarget && proxyStore.currentTarget.id === id) {
       proxyStore.setCurrentTarget(null)
       ElMessage.info('已退出代办模式')
@@ -274,20 +272,19 @@ function switchToProxy(binding: ProxyRelationVO) {
   const target = {
     id: binding.id,
     profileId: binding.targetProfileId!,
+    targetUserId: binding.targetUserId!,
     name: binding.targetProfileName || `档案 ${binding.targetProfileId}`,
     relation: binding.relation || '家属',
     authorizedActions: binding.authorizedActions || ''
   }
   proxyStore.setCurrentTarget(target)
   ElMessage.success(`已切换至为 ${target.name} 代办`)
-  // 可选：跳转到首页刷新数据
   router.push('/')
 }
 
 function exitProxy() {
   proxyStore.setCurrentTarget(null)
   ElMessage.success('已退出代办模式，当前为本人办理')
-  // 可刷新当前页面数据或跳转
   router.push('/')
 }
 
@@ -328,17 +325,8 @@ onMounted(() => {
   align-items: center;
 }
 
-.binding-section,
-.pending-section {
-  margin-bottom: 2rem;
-}
-
-.binding-section h3,
-.pending-section h3 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  color: var(--text-primary);
+.proxy-tabs {
+  margin-bottom: 1.5rem;
 }
 
 .binding-list,

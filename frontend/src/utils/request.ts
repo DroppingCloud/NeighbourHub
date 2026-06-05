@@ -22,17 +22,8 @@ request.interceptors.request.use(
     const proxyStore = useProxyStore()
     const skipProxy = config.headers && (config.headers as any)['X-Skip-Proxy'] === 'true'
     if (proxyStore.currentTarget && !skipProxy) {
-      // 添加到 URL 参数中（GET 请求）或请求体（POST/PUT）
-      if (config.method === 'get') {
-        config.params = { ...config.params, _proxyFor: proxyStore.currentTarget.profileId }
-      } else {
-        // 对于 POST/PUT 等，添加到 data 中（后端需要从请求体解析）
-        if (config.data && typeof config.data === 'object') {
-          config.data._proxyFor = proxyStore.currentTarget.profileId
-        } else {
-          config.data = { _proxyFor: proxyStore.currentTarget.profileId }
-        }
-      }
+      // 始终通过 URL 参数传递 _proxyFor，后端通过 @RequestParam 读取代理目标
+      config.params = { ...config.params, _proxyFor: proxyStore.currentTarget.targetUserId }
     }
     return config
   },

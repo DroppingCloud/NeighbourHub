@@ -94,7 +94,7 @@
         <el-table-column prop="expectTime" label="预约时间" width="180" />
         <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="quickDispatch(row)">派单</el-button>
+            <el-button type="primary" size="small" @click="quickDispatch(row)">接取</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -110,8 +110,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets, Loading, Calendar, Check, Position, Bell, Setting } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getWorkOrderList, auditWorkOrder, type WorkOrderVO } from '@/api/workOrder'
-import { assignBooking, type BookingVO } from '@/api/booking'
-import { getStaffBookingList } from '@/api/booking'
+import { assignBooking, type BookingVO, getStaffBookingList } from '@/api/booking'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -181,8 +180,8 @@ function quickReject(order: WorkOrderVO) {
 
 async function quickDispatch(booking: BookingVO) {
   try {
-    await assignBooking(booking.bookingId, Number(authStore.userInfo?.userId || 2))
-    ElMessage.success('已派单')
+    await assignBooking(booking.bookingId)
+    ElMessage.success('已接取')
     loadWorkbench()
   } catch (err: any) {
     const msg = err?.message || String(err)

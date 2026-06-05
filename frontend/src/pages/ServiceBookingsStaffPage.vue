@@ -12,7 +12,7 @@
       </div>
       <div class="stat-card-mini">
         <div class="stat-value">{{ confirmedCount }}</div>
-        <div class="stat-label">已派单</div>
+        <div class="stat-label">已接取</div>
       </div>
       <div class="stat-card-mini">
         <div class="stat-value">{{ inProgressCount }}</div>
@@ -29,19 +29,16 @@
         <div v-for="booking in pendingBookings" :key="booking.bookingId" class="dispatch-card">
           <BookingInfo :booking="booking" />
           <div class="card-actions">
-            <el-select v-model="selectedStaff[booking.bookingId]" placeholder="服务人员" size="small">
-              <el-option label="staff01" :value="2" />
-            </el-select>
-            <el-button type="primary" size="small" @click="dispatch(booking.bookingId)">
+            <el-button type="primary" size="small" @click="claim(booking.bookingId)">
               <el-icon><Position /></el-icon>
-              派单
+              接取
             </el-button>
           </div>
         </div>
         <el-empty v-if="pendingBookings.length === 0" description="暂无待调度预约" />
       </el-tab-pane>
 
-      <el-tab-pane label="已派单" name="confirmed">
+      <el-tab-pane label="已接取" name="confirmed">
         <div v-for="booking in confirmedBookings" :key="booking.bookingId" class="dispatch-card">
           <BookingInfo :booking="booking" />
           <div class="card-actions">
@@ -97,7 +94,7 @@ import {
 
 const activeTab = ref('pending')
 const bookings = ref<BookingVO[]>([])
-const selectedStaff = ref<Record<number, number>>({})
+// removed selectedStaff: claim model, each staff claims pending bookings
 
 // 统计数据
 const pendingCount = ref(0)
@@ -168,14 +165,9 @@ async function loadStatistics() {
 }
 
 async function dispatch(bookingId: number) {
-  const staffId = selectedStaff.value[bookingId]
-  if (!staffId) {
-    ElMessage.warning('请选择服务人员')
-    return
-  }
   try {
-    await assignBooking(bookingId, staffId)
-    ElMessage.success('派单成功')
+    await assignBooking(bookingId)
+    ElMessage.success('接取成功')
     activeTab.value = 'confirmed'
     await loadBookings()
     await loadStatistics()
@@ -187,6 +179,11 @@ async function dispatch(bookingId: number) {
       ElMessage.error(msg || '派单失败')
     }
   }
+}
+
+async function claim(bookingId: number) {
+  // wrapper to keep older function name semantics
+  await dispatch(bookingId)
 }
 
 async function start(bookingId: number) {
@@ -211,7 +208,7 @@ async function completeService(bookingId: number) {
 }
 
 function showFeedback(booking: BookingVO) {
-  const feedback = booking.feedback || '暂无评价内容'
+  const feedback = booking.feedback && booking.feedback.trim() ? booking.feedback : '居民未做出评价'
   ElMessageBox.alert(feedback, '居民评价', {
     confirmButtonText: '关闭',
     type: 'info'

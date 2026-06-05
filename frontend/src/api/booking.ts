@@ -20,6 +20,8 @@ export interface BookingVO {
   staffPhone?: string
   feedback?: string
   createTime: string
+  isProxy?: boolean
+  proxyUserName?: string
 }
 
 export const createBooking = (data: BookingRequest) =>
@@ -35,7 +37,7 @@ export const cancelBooking = (id: number) =>
   request.put<any, void>(`/api/booking/${id}/cancel`)
 
 export const assignBooking = (id: number, staffUserId: number) =>
-  request.put<any, void>(`/api/booking/${id}/assign`, { staffUserId })
+  request.put<any, void>(`/api/booking/${id}/claim`)
 
 export function startBooking(bookingId: number) {
   return request.put<any, void>(`/api/booking/${bookingId}/start`)

@@ -53,12 +53,11 @@ public class BookingController {
         return Result.success();
     }
 
-    @Operation(summary = "分配服务人员")
-    @PutMapping("/{id}/assign")
-    public Result<Void> assign(@AuthenticationPrincipal Long operatorId,
-                               @PathVariable Long id,
-                               @Valid @RequestBody BookingAssignDTO dto) {
-        bookingService.assign(operatorId, id, dto.getStaffUserId());
+    @Operation(summary = "工作人员接取预约")
+    @PutMapping("/{id}/claim")
+    public Result<Void> claim(@AuthenticationPrincipal Long staffUserId,
+                              @PathVariable Long id) {
+        bookingService.claim(staffUserId, id);
         return Result.success();
     }
 

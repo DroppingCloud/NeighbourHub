@@ -18,19 +18,30 @@
         :key="booking.bookingId" 
         :data-id="booking.bookingId"
         class="booking-card"
-        :class="{ 'highlight-flash': shouldHighlight(booking.bookingId) }"
+        :class="{ 'highlight-flash': shouldHighlight(booking.bookingId), 'expanded': expandedIds.has(booking.bookingId) }"
       >
-        <div class="card-header">
+        <!-- 折叠头部（始终显示） -->
+        <div class="card-header" @click="toggleExpand(booking.bookingId)">
           <div class="service-info">
             <span class="service-name">{{ booking.serviceTypeLabel || booking.serviceType }}</span>
             <el-tag :type="getStatusType(booking.status)" size="small">
               {{ booking.statusLabel || booking.status }}
             </el-tag>
+            <el-tag v-if="booking.isProxy" type="info" size="small" style="margin-left:8px">
+              代办: {{ booking.proxyUserName || '他人代办' }}
+            </el-tag>
           </div>
-          <span class="create-time">{{ booking.createTime }}</span>
+          <div class="header-right">
+            <span class="create-time">{{ booking.createTime }}</span>
+            <el-icon class="expand-icon">
+              <ArrowDown v-if="!expandedIds.has(booking.bookingId)" />
+              <ArrowUp v-else />
+            </el-icon>
+          </div>
         </div>
 
-        <div class="card-body">
+        <!-- 折叠内容（点击后展开） -->
+        <div v-show="expandedIds.has(booking.bookingId)" class="card-body">
           <div class="info-row">
             <span class="label">预约时间</span>
             <span>{{ booking.expectTime }}</span>
@@ -43,29 +54,28 @@
             <span class="label">备注</span>
             <span>{{ booking.remark || '无' }}</span>
           </div>
-        </div>
-        <div v-if="booking.staffName" class="staff-info">
-          <span class="label">服务人员：</span>
-          <span>{{ booking.staffName }} ({{ booking.staffPhone }})</span>
-        </div>
-
-        <div class="card-footer">
-          <el-button
-            v-if="booking.status === 'pending' || booking.status === 'confirmed'"
-            type="danger"
-            size="small"
-            @click="cancel(booking.bookingId)"
-          >
-            取消预约
-          </el-button>
-          <el-button
-            v-if="booking.status === 'completed'"
-            type="primary"
-            size="small"
-            @click="goToFeedback(booking.bookingId)"
-          >
-            去评价
-          </el-button>
+          <div v-if="booking.staffName" class="staff-info">
+            <span class="label">服务人员：</span>
+            <span>{{ booking.staffName }} ({{ booking.staffPhone }})</span>
+          </div>
+          <div class="card-footer">
+            <el-button
+              v-if="booking.status === 'pending' || booking.status === 'confirmed'"
+              type="danger"
+              size="small"
+              @click.stop="cancel(booking.bookingId)"
+            >
+              取消预约
+            </el-button>
+            <el-button
+              v-if="booking.status === 'completed'"
+              type="primary"
+              size="small"
+              @click.stop="goToFeedback(booking.bookingId)"
+            >
+              去评价
+            </el-button>
+          </div>
         </div>
       </div>
       <el-empty v-if="!loading && bookings.length === 0" description="暂无预约记录" />
@@ -77,7 +87,7 @@
 import { onMounted, ref, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Bell } from '@element-plus/icons-vue'
+import { Bell, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 import { cancelBooking, getBookingList, type BookingVO } from '@/api/booking'
 
 const router = useRouter()
@@ -85,6 +95,7 @@ const route = useRoute()
 const loading = ref(false)
 const bookings = ref<BookingVO[]>([])
 const highlightId = ref<string | null>(null)
+const expandedIds = ref<Set<number>>(new Set()) // 存储展开的预约ID
 
 // 获取需要高亮的ID
 const getHighlightId = () => {
@@ -100,12 +111,21 @@ const shouldHighlight = (id: number) => {
 // 清除高亮
 const clearHighlight = () => {
   highlightId.value = null
-  // 移除URL中的highlightId参数
   router.replace({ path: '/booking/list', query: {} })
-  // 移除所有高亮样式
   document.querySelectorAll('.booking-card.highlight-flash').forEach(el => {
     el.classList.remove('highlight-flash')
   })
+}
+
+// 切换折叠状态
+const toggleExpand = (id: number) => {
+  if (expandedIds.value.has(id)) {
+    expandedIds.value.delete(id)
+  } else {
+    expandedIds.value.add(id)
+  }
+  // 触发响应式更新
+  expandedIds.value = new Set(expandedIds.value)
 }
 
 function getStatusType(status: string) {
@@ -134,7 +154,6 @@ async function cancel(id: number) {
   await cancelBooking(id)
   ElMessage.success('预约已取消')
   await loadBookings()
-  // 取消后清除高亮
   clearHighlight()
 }
 
@@ -142,23 +161,22 @@ function goToFeedback(id: number) {
   router.push({ path: '/service-feedback', query: { bookingId: id, mode: 'write' } })
 }
 
-// 滚动到高亮项并添加高亮效果
+// 滚动到高亮项并自动展开
 async function scrollToHighlight() {
   const targetId = getHighlightId()
   if (!targetId) return
   
   highlightId.value = targetId
+  const idNum = Number(targetId)
+  // 自动展开高亮项
+  expandedIds.value.add(idNum)
+  expandedIds.value = new Set(expandedIds.value)
   
   await nextTick()
   
-  // 查找目标元素
   const targetElement = document.querySelector(`.booking-card[data-id="${targetId}"]`) as HTMLElement
-  
   if (targetElement) {
-    // 滚动到目标元素
     targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    
-    // 5秒后移除高亮（但保留URL参数，刷新页面后还会高亮）
     setTimeout(() => {
       const element = document.querySelector(`.booking-card[data-id="${targetId}"]`)
       if (element) {
@@ -166,7 +184,6 @@ async function scrollToHighlight() {
       }
     }, 5000)
   } else {
-    // 如果没找到，可能是预约不存在，清除高亮
     console.warn('未找到要高亮的预约记录:', targetId)
     clearHighlight()
   }
@@ -174,7 +191,6 @@ async function scrollToHighlight() {
 
 onMounted(async () => {
   await loadBookings()
-  // 加载完成后滚动到高亮项
   await scrollToHighlight()
 })
 </script>
@@ -228,14 +244,94 @@ onMounted(async () => {
 .booking-card {
   background: var(--card-bg);
   border-radius: var(--radius-md);
-  padding: 1.25rem;
   box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
 }
 
-/* 高亮闪烁动画 */
+/* 折叠头部（始终显示） */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.card-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.service-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.service-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.create-time {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.expand-icon {
+  color: var(--text-muted);
+  font-size: 1rem;
+  transition: transform 0.2s;
+}
+
+/* 折叠内容 */
+.card-body {
+  padding: 0 1.25rem 1.25rem 1.25rem;
+  border-top: 0.0625rem solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.info-row {
+  display: flex;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.label {
+  width: 5rem;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.staff-info {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 0.0625rem solid var(--border-color);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+/* 高亮闪烁动画 (保持不变) */
 .booking-card.highlight-flash {
   animation: highlightBlink 0.5s ease-in-out 3, pulseGlow 1.5s ease-out;
   background: linear-gradient(90deg, 
@@ -273,63 +369,5 @@ onMounted(async () => {
   100% {
     box-shadow: 0 0 0 0 rgba(212, 168, 67, 0);
   }
-}
-
-.card-header,
-.card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.card-header {
-  padding-bottom: 0.75rem;
-  border-bottom: 0.0625rem solid var(--border-color);
-  margin-bottom: 0.75rem;
-}
-
-.service-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.service-name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.create-time,
-.label {
-  color: var(--text-muted);
-}
-
-.card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.staff-info {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 0.0625rem solid var(--border-color);
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.info-row {
-  display: flex;
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-}
-
-.label {
-  width: 5rem;
-  flex-shrink: 0;
 }
 </style>
