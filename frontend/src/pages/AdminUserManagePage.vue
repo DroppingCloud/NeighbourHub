@@ -1,31 +1,38 @@
 <template>
   <div class="user-management-container">
     <div class="page-header">
-      <h2>用户管理</h2>
-      <p>按工作人员、居民和家属分类管理账号；工作人员账号由管理员创建，初始密码统一为 123456。</p>
+      <div class="page-header-left">
+        <h2>用户管理</h2>
+        <p>工作人员 · 居民 · 家属账号管理</p>
+      </div>
+      <el-button v-if="activeRole === 'staff'" class="btn-add" @click="showAddDialog = true">
+        <el-icon><Plus /></el-icon>
+        新增工作人员
+      </el-button>
     </div>
 
-    <div class="role-tabs" role="tablist" aria-label="用户类型">
-      <button
-        v-for="item in roleTabs"
-        :key="item.value"
-        class="role-tab"
-        :class="{ active: activeRole === item.value }"
-        type="button"
-        @click="switchRole(item.value)"
-      >
-        <span>{{ item.label }}</span>
-        <small>{{ item.desc }}</small>
-      </button>
-    </div>
+    <!-- 角色切换 + 筛选整合在一起 -->
+    <div class="toolbar">
+      <div class="role-tabs" role="tablist" aria-label="用户类型">
+        <button
+          v-for="item in roleTabs"
+          :key="item.value"
+          class="role-tab"
+          :class="{ active: activeRole === item.value }"
+          type="button"
+          @click="switchRole(item.value)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
 
-    <div class="filter-card">
-      <div class="filter-left">
+      <div class="filters">
         <el-input
           v-model="searchKeyword"
-          placeholder="用户名 / 姓名 / 手机号"
+          placeholder="搜索用户名 / 姓名 / 手机"
           clearable
-          class="search-inp"
+          class="filter-input search-inp"
+          @keyup.enter="loadUsers"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
@@ -35,85 +42,71 @@
         <el-select
           v-if="activeRole === 'staff'"
           v-model="filterStaffType"
-          placeholder="全部工作人员类型"
+          placeholder="工作人员类型"
           clearable
-          class="sel-item wide"
+          class="filter-input sel-item"
         >
-          <el-option label="事项办理工作人员" value="application" />
-          <el-option label="服务预约工作人员" value="booking" />
+          <el-option label="事项办理" value="application" />
+          <el-option label="服务预约" value="booking" />
         </el-select>
 
-        <el-select v-model="filterStatus" placeholder="全部状态" clearable class="sel-item">
+        <el-select v-model="filterStatus" placeholder="状态" clearable class="filter-input sel-item-sm">
           <el-option label="正常" value="active" />
           <el-option label="禁用" value="disabled" />
         </el-select>
-
-        <el-button class="btn-dark" @click="loadUsers">
-          <el-icon><Search /></el-icon>
-          查询
-        </el-button>
       </div>
-
-      <el-button v-if="activeRole === 'staff'" class="btn-dark" @click="showAddDialog = true">
-        <el-icon><Plus /></el-icon>
-        新增工作人员
-      </el-button>
     </div>
 
+    <!-- 表格 -->
     <div class="table-card">
-      <el-table
-        :data="filteredUsers"
-        stripe
-        v-loading="loading"
-        :header-cell-style="tableHeaderStyle"
-      >
-        <el-table-column prop="userId" label="ID" width="70" />
-        <el-table-column prop="username" label="登录账号" min-width="120" />
-        <el-table-column prop="realName" label="姓名" min-width="110" />
-        <el-table-column prop="phone" label="手机号" min-width="130" />
-
-        <el-table-column label="用户类型" width="120" align="center">
+      <el-table :data="filteredUsers" v-loading="loading">
+        <el-table-column prop="userId" label="ID" width="64" />
+        <el-table-column prop="username" label="账号" min-width="110" />
+        <el-table-column prop="realName" label="姓名" min-width="100">
           <template #default="{ row }">
-            <el-tag :type="roleTagType(row.role)" effect="plain">
-              {{ roleText(row.role) }}
-            </el-tag>
+            <span>{{ row.realName || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="phone" label="手机号" min-width="125" />
+
+        <el-table-column label="角色" width="100" align="center">
+          <template #default="{ row }">
+            <span class="role-dot" :class="row.role">{{ roleText(row.role) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column v-if="activeRole === 'staff'" label="工作人员类型" width="170" align="center">
+        <el-table-column v-if="activeRole === 'staff'" label="类型" width="130" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.staffType === 'booking' ? 'warning' : 'primary'" effect="plain">
-              {{ staffTypeText(row.staffType) }}
-            </el-tag>
+            <span class="type-label" :class="row.staffType">{{ staffTypeText(row.staffType) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column v-if="activeRole === 'staff'" label="服务类型" width="130" align="center">
+        <el-table-column v-if="activeRole === 'staff'" label="服务类型" width="110" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.staffType === 'booking'" type="success" effect="plain">
-              {{ bookingServiceTypeText(row.bookingServiceType) }}
-            </el-tag>
-            <span v-else class="muted-text">-</span>
+            <span v-if="row.staffType === 'booking'" class="type-label booking">{{ bookingServiceTypeText(row.bookingServiceType) }}</span>
+            <span v-else class="time-text">-</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="communityId" label="社区ID" width="100" />
+        <el-table-column prop="communityId" label="社区" width="72" align="center" />
 
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">
-              {{ row.status === 'active' ? '正常' : '禁用' }}
-            </el-tag>
+            <span class="status-badge" :class="row.status">{{ row.status === 'active' ? '正常' : '禁用' }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column v-if="activeRole === 'staff'" label="业务情况" width="120" align="center">
+        <el-table-column v-if="activeRole === 'staff'" label="操作" width="100" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openStaffBusiness(row)">查看业务</el-button>
+            <button class="link-action" @click="openStaffBusiness(row)">查看业务</button>
           </template>
         </el-table-column>
 
-        <el-table-column prop="createTime" label="创建时间" min-width="170" />
+        <el-table-column prop="createTime" label="创建时间" min-width="155">
+          <template #default="{ row }">
+            <span class="time-text">{{ row.createTime }}</span>
+          </template>
+        </el-table-column>
       </el-table>
 
       <div class="page-wrap">
@@ -122,28 +115,21 @@
           v-model:page-size="pageSize"
           :page-sizes="[10, 20, 50, 100]"
           :total="total"
-          layout="total, sizes, prev, pager, next, jumper"
+          layout="total, sizes, prev, pager, next"
           @size-change="loadUsers"
           @current-change="loadUsers"
         />
       </div>
     </div>
 
-    <el-dialog v-model="showAddDialog" title="新增工作人员" width="520px" @close="resetForm">
-      <el-alert
-        title="工作人员账号只能由管理员创建，初始密码为 123456，登录后可自行修改。居民和家属账号仍通过注册流程创建。"
-        type="info"
-        show-icon
-        :closable="false"
-        class="dialog-tip"
-      />
-
-      <el-form :model="staffForm" :rules="staffFormRules" ref="staffFormRef" label-width="8rem">
+    <!-- 新增弹窗 -->
+    <el-dialog v-model="showAddDialog" title="新增工作人员" width="520px" @close="resetForm" class="admin-dialog" :show-close="true" append-to-body>
+      <el-form :model="staffForm" :rules="staffFormRules" ref="staffFormRef" label-position="top" class="dialog-form">
         <el-form-item label="登录账号" prop="username">
           <el-input v-model="staffForm.username" placeholder="请输入登录账号" />
         </el-form-item>
         <el-form-item label="真实姓名" prop="realName">
-          <el-input v-model="staffForm.realName" placeholder="请输入工作人员姓名" />
+          <el-input v-model="staffForm.realName" placeholder="请输入姓名" />
         </el-form-item>
         <el-form-item label="手机号" prop="phone">
           <el-input v-model="staffForm.phone" placeholder="请输入手机号" />
@@ -152,10 +138,10 @@
           <el-input v-model="staffForm.email" placeholder="可选" />
         </el-form-item>
         <el-form-item label="社区ID">
-          <el-input-number v-model="staffForm.communityId" :min="1" controls-position="right" />
+          <el-input-number v-model="staffForm.communityId" :min="1" controls-position="right" style="width: 100%" />
         </el-form-item>
         <el-form-item label="工作人员类型" prop="staffType">
-          <el-segmented v-model="staffForm.staffType" :options="staffTypeOptions" />
+          <el-segmented v-model="staffForm.staffType" :options="staffTypeOptions" block />
         </el-form-item>
         <el-form-item
           v-if="staffForm.staffType === 'booking'"
@@ -174,61 +160,57 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="saveStaff">创建账号</el-button>
+        <div class="dialog-footer">
+          <el-button class="btn-cancel" @click="showAddDialog = false">取消</el-button>
+          <el-button class="btn-submit" :loading="submitting" @click="saveStaff">创建账号</el-button>
+        </div>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="businessDialogVisible" title="工作人员业务情况" width="780px">
+    <!-- 业务弹窗 -->
+    <el-dialog v-model="businessDialogVisible" title="业务情况" width="720px">
       <div v-if="activeStaff" class="business-dialog">
         <div class="staff-summary">
-          <div>
-            <span class="muted">工作人员</span>
+          <div class="staff-name-block">
             <strong>{{ activeStaff.realName || activeStaff.username }}</strong>
+            <span class="type-label" :class="activeStaff.staffType">{{ staffTypeText(activeStaff.staffType) }}</span>
           </div>
-          <el-tag :type="activeStaff.staffType === 'booking' ? 'warning' : 'primary'" effect="plain">
-            {{ staffTypeText(activeStaff.staffType) }}
-          </el-tag>
-          <el-tag v-if="activeStaff.staffType === 'booking'" type="success" effect="plain">
-            {{ bookingServiceTypeText(activeStaff.bookingServiceType) }}
-          </el-tag>
+          <div class="business-stats">
+            <div class="bs-item">
+              <span class="bs-num">{{ pendingBusiness.length }}</span>
+              <span class="bs-label">待办</span>
+            </div>
+            <div class="bs-item">
+              <span class="bs-num">{{ finishedBusiness.length }}</span>
+              <span class="bs-label">已办</span>
+            </div>
+          </div>
         </div>
 
-        <el-skeleton v-if="businessLoading" :rows="5" animated />
+        <el-skeleton v-if="businessLoading" :rows="4" animated />
         <template v-else>
-          <div class="business-stats">
-            <div>
-              <strong>{{ pendingBusiness.length }}</strong>
-              <span>当前待办</span>
-            </div>
-            <div>
-              <strong>{{ finishedBusiness.length }}</strong>
-              <span>已办理</span>
-            </div>
-          </div>
-
           <div class="business-columns">
             <section>
               <h4>当前待办</h4>
-              <el-empty v-if="pendingBusiness.length === 0" description="暂无待办业务" :image-size="80" />
+              <el-empty v-if="pendingBusiness.length === 0" description="暂无待办" :image-size="64" />
               <div v-for="item in pendingBusiness" :key="item.key" class="business-item">
-                <div>
+                <div class="bi-content">
                   <strong>{{ item.title }}</strong>
                   <p>{{ item.desc }}</p>
                 </div>
-                <el-tag effect="plain">{{ item.statusLabel }}</el-tag>
+                <span class="bi-status pending">{{ item.statusLabel }}</span>
               </div>
             </section>
 
             <section>
               <h4>已办理</h4>
-              <el-empty v-if="finishedBusiness.length === 0" description="暂无已办理业务" :image-size="80" />
+              <el-empty v-if="finishedBusiness.length === 0" description="暂无记录" :image-size="64" />
               <div v-for="item in finishedBusiness" :key="item.key" class="business-item">
-                <div>
+                <div class="bi-content">
                   <strong>{{ item.title }}</strong>
                   <p>{{ item.desc }}</p>
                 </div>
-                <el-tag type="success" effect="plain">{{ item.statusLabel }}</el-tag>
+                <span class="bi-status done">{{ item.statusLabel }}</span>
               </div>
             </section>
           </div>
@@ -487,138 +469,345 @@ onMounted(loadUsers)
 .user-management-container {
   max-width: 75rem;
   margin: 0 auto;
-  padding: 2rem;
-  background-color: var(--bg-primary);
-  min-height: 100vh;
 }
 
+/* ====== Header ====== */
 .page-header {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .page-header h2 {
   font-family: var(--font-serif);
   font-size: 1.5rem;
-  margin: 0 0 0.375rem;
+  margin: 0 0 0.25rem;
   color: var(--text-primary);
   font-weight: 700;
 }
 
 .page-header p {
   color: var(--text-muted);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   margin: 0;
-}
-
-.role-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.role-tab {
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  border-radius: 0.75rem;
-  padding: 1rem 1.25rem;
-  text-align: left;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
-}
-
-.role-tab span,
-.role-tab small {
-  display: block;
-}
-
-.role-tab span {
-  font-size: 1.05rem;
-  color: var(--text-primary);
-  font-weight: 600;
-  margin-bottom: 0.35rem;
-}
-
-.role-tab small {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.role-tab.active {
-  border-color: var(--gold);
-  background: var(--bg-tertiary);
-  box-shadow: 0 0.25rem 1rem rgba(212, 168, 67, 0.16);
-}
-
-.filter-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-  background: var(--card-bg);
-  padding: 1.25rem 1.5rem;
-  border-radius: 0.875rem;
-  box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.05);
-  margin-bottom: 1.25rem;
-}
-
-.filter-left {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  flex-wrap: wrap;
-}
-
-.search-inp {
-  width: 14rem;
-}
-
-.sel-item {
-  width: 11rem;
-}
-
-.sel-item.wide {
-  width: 13rem;
 }
 
 .full-select {
   width: 100%;
 }
 
-.muted-text {
-  color: var(--text-muted);
-}
-
-.btn-dark {
-  background-color: var(--ink) !important;
+.btn-add {
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%) !important;
   color: #fff !important;
   border: none !important;
   border-radius: 0.5rem !important;
+  padding: 0.5rem 1.125rem !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.02em !important;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  box-shadow: 0 2px 6px rgba(26, 26, 46, 0.15) !important;
 }
 
+.btn-add:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 6px 20px rgba(26, 26, 46, 0.22) !important;
+}
+
+/* ====== Toolbar: Tabs + Filters ====== */
+.toolbar {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.role-tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--bg-tertiary);
+  border-radius: 0.5rem;
+  padding: 0.2rem;
+}
+
+.role-tab {
+  border: none;
+  background: transparent;
+  border-radius: 0.375rem;
+  padding: 0.4rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.role-tab:hover {
+  color: var(--text-primary);
+}
+
+.role-tab.active {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* 统一所有筛选组件尺寸 */
+.filter-input :deep(.el-input__wrapper) {
+  height: 2rem !important;
+  min-height: 2rem !important;
+  padding: 0 0.75rem !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 0.8125rem !important;
+  line-height: 2rem !important;
+  box-sizing: border-box !important;
+}
+
+.filter-input :deep(.el-input__inner) {
+  height: 2rem !important;
+  line-height: 2rem !important;
+  font-size: 0.8125rem !important;
+}
+
+.filter-input :deep(.el-input__prefix),
+.filter-input :deep(.el-input__suffix) {
+  font-size: 0.875rem !important;
+}
+
+.search-inp {
+  width: 13rem;
+}
+
+.sel-item {
+  width: 10rem;
+}
+
+.sel-item-sm {
+  width: 7rem;
+}
+
+/* ====== Table ====== */
 .table-card {
   background: var(--card-bg);
-  border-radius: 0.875rem;
-  box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
   overflow: hidden;
 }
 
+:deep(.el-table) {
+  background: transparent !important;
+  --el-table-header-bg-color: transparent;
+  font-size: 0.8125rem !important;
+}
+
+:deep(.el-table th) {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-muted) !important;
+  font-weight: 500 !important;
+  font-size: 0.75rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 0.625rem 0 !important;
+}
+
+:deep(.el-table td) {
+  border-bottom-color: var(--border-color) !important;
+  padding: 0.75rem 0 !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-table .cell) {
+  color: inherit !important;
+}
+
+:deep(.el-table tr) {
+  background: transparent !important;
+}
+
+:deep(.el-table tr:hover td) {
+  background: rgba(212, 168, 67, 0.02) !important;
+}
+
+/* Custom labels replacing el-tag */
+.role-dot {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.role-dot.staff { color: var(--ink); background: rgba(26, 26, 46, 0.06); }
+.role-dot.resident { color: var(--jade); background: rgba(39, 174, 96, 0.06); }
+.role-dot.family { color: var(--gold); background: rgba(212, 168, 67, 0.08); }
+.role-dot.admin { color: var(--vermilion); background: rgba(192, 57, 43, 0.06); }
+
+.type-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+}
+
+.type-label.application { color: var(--ink); background: rgba(26, 26, 46, 0.05); }
+.type-label.booking { color: #d97706; background: rgba(217, 119, 6, 0.06); }
+
+.status-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.status-badge.active { color: var(--jade); }
+.status-badge.disabled { color: var(--text-muted); }
+
+.link-action {
+  background: none;
+  border: none;
+  color: var(--gold);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.link-action:hover {
+  color: var(--ink);
+}
+
+.time-text {
+  font-size: 0.75rem;
+  color: var(--text-muted) !important;
+}
+
 .page-wrap {
-  margin: 1.25rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   display: flex;
   justify-content: flex-end;
+  border-top: 1px solid var(--border-color);
+}
+
+/* ====== Dialog System ====== */
+:deep(.admin-dialog .el-dialog) {
+  border-radius: 1rem !important;
+  overflow: hidden;
+  box-shadow:
+    0 24px 80px rgba(26, 26, 46, 0.12),
+    0 8px 24px rgba(26, 26, 46, 0.06),
+    0 0 0 1px rgba(26, 26, 46, 0.04) !important;
+}
+
+:deep(.admin-dialog .el-dialog__header) {
+  padding: 1rem 1.5rem !important;
+  margin-right: 0 !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+:deep(.admin-dialog .el-dialog__title) {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+:deep(.admin-dialog .el-dialog__headerbtn) {
+  top: 1rem;
+  right: 1.25rem;
+}
+
+:deep(.admin-dialog .el-dialog__body) {
+  padding: 1.25rem 1.5rem 0.75rem !important;
+}
+
+:deep(.admin-dialog .el-dialog__footer) {
+  padding: 0 !important;
+}
+
+.dialog-form {
+  padding: 0;
+}
+
+.dialog-form :deep(.el-form-item) {
+  margin-bottom: 0.875rem !important;
+}
+
+.dialog-form :deep(.el-form-item__label) {
+  font-size: 0.8125rem !important;
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+  padding-bottom: 0.125rem !important;
+  line-height: 1.4 !important;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding: 0.75rem 1.5rem 1.25rem;
+}
+
+.btn-cancel {
+  background: transparent !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-muted) !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 1.25rem !important;
+  font-size: 0.8125rem !important;
+  transition: all 0.2s !important;
+}
+
+.btn-cancel:hover {
+  border-color: var(--text-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.btn-submit {
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  padding: 0.5rem 1.5rem !important;
+  font-weight: 600 !important;
+  font-size: 0.8125rem !important;
+  letter-spacing: 0.03em !important;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  box-shadow: 0 2px 8px rgba(26, 26, 46, 0.15) !important;
+}
+
+.btn-submit:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(26, 26, 46, 0.22) !important;
 }
 
 .dialog-tip {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: var(--radius-sm) !important;
 }
 
+/* ====== Business Dialog ====== */
 .business-dialog {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .staff-summary {
@@ -626,111 +815,123 @@ onMounted(loadUsers)
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   background: var(--bg-tertiary);
-  border-radius: 0.75rem;
+  border-radius: var(--radius-md);
 }
 
-.staff-summary strong,
-.staff-summary .muted {
-  display: block;
+.staff-name-block {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
 }
 
-.staff-summary strong {
-  margin-top: 0.25rem;
+.staff-name-block strong {
+  font-size: 1rem;
   color: var(--text-primary);
-  font-size: 1.1rem;
-}
-
-.staff-summary .muted {
-  color: var(--text-muted);
-  font-size: 0.85rem;
 }
 
 .business-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  display: flex;
+  gap: 1.5rem;
 }
 
-.business-stats div {
-  padding: 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: 0.75rem;
-  background: var(--card-bg);
+.bs-item {
   text-align: center;
 }
 
-.business-stats strong,
-.business-stats span {
+.bs-num {
   display: block;
-}
-
-.business-stats strong {
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--text-primary);
-  font-size: 1.5rem;
+  line-height: 1.2;
 }
 
-.business-stats span {
+.bs-label {
+  font-size: 0.6875rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
 }
 
 .business-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .business-columns h4 {
   margin: 0 0 0.75rem;
   color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .business-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem;
-  border: 1px solid var(--border-color);
-  border-radius: 0.75rem;
-  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
   background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  transition: border-color 0.2s;
 }
 
-.business-item strong {
+.business-item:hover {
+  border-color: var(--gold);
+}
+
+.bi-content strong {
   display: block;
   color: var(--text-primary);
-  margin-bottom: 0.25rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.125rem;
 }
 
-.business-item p {
+.bi-content p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.85rem;
-  line-height: 1.5;
+  font-size: 0.75rem;
+  line-height: 1.4;
 }
 
-@media (max-width: 760px) {
-  .role-tabs {
-    grid-template-columns: 1fr;
-  }
+.bi-status {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
-  .business-columns,
-  .business-stats {
-    grid-template-columns: 1fr;
-  }
+.bi-status.pending { color: #d97706; background: rgba(217, 119, 6, 0.08); }
+.bi-status.done { color: var(--jade); background: rgba(39, 174, 96, 0.08); }
 
-  .filter-card,
-  .filter-left {
+@media (max-width: 48rem) {
+  .page-header {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
   .search-inp,
   .sel-item,
-  .sel-item.wide {
+  .sel-item-sm {
     width: 100% !important;
+  }
+
+  .business-columns {
+    grid-template-columns: 1fr;
   }
 }
 </style>

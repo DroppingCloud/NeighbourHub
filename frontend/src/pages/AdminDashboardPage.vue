@@ -140,26 +140,37 @@ function addService() {
 }
 
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .page-header p {
   color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .stat-card {
   background: var(--card-bg);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   padding: 1.25rem;
   text-align: center;
   box-shadow: var(--shadow-sm);
   margin-bottom: 1.25rem;
+  transition: all 0.25s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(212, 168, 67, 0.25);
 }
 
 .stat-value {
@@ -169,28 +180,57 @@ function addService() {
 }
 
 .stat-label {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--text-muted);
-  margin-top: 0.5rem;
+  margin-top: 0.375rem;
 }
 
 .admin-tabs {
   background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 1.25rem;
+  padding: 1.5rem;
   margin-top: 1.25rem;
 }
 
+:deep(.el-tabs__item) {
+  font-weight: 500 !important;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: var(--gold) !important;
+}
+
+:deep(.el-tabs__active-bar) {
+  background-color: var(--gold) !important;
+}
+
 .panel {
-  border: 0.0625rem solid var(--border-color);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 1rem;
+  padding: 1.25rem;
   margin-bottom: 1rem;
 }
 
 .panel h3 {
   font-size: 1rem;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 1rem;
+}
+
+:deep(.el-table th) {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+:deep(.el-button--primary) {
+  background: var(--ink) !important;
+  border-color: var(--ink) !important;
+}
+
+:deep(.el-button--primary:hover) {
+  background: var(--ink-light) !important;
+  border-color: var(--ink-light) !important;
 }
 </style>
