@@ -1,17 +1,25 @@
 ﻿<template>
   <div class="ai-guide-container">
-    <!-- 简洁头部 -->
+    <!-- 装饰背景层 -->
+    <div class="bg-decor">
+      <div class="bg-orb bg-orb-1"></div>
+      <div class="bg-orb bg-orb-2"></div>
+      <div class="bg-orb bg-orb-3"></div>
+      <div class="bg-grid"></div>
+    </div>
+
+    <!-- 头部 -->
     <div class="chat-header">
       <div class="header-left">
         <div class="header-icon">
-          <el-icon :size="24"><MagicStick /></el-icon>
+          <el-icon :size="22"><MagicStick /></el-icon>
+          <span class="icon-pulse"></span>
         </div>
         <div class="header-text">
-          <h2>AI智能导办助手</h2>
-          <p>智能对话 | 一键办理</p>
+          <h2>AI智能导办</h2>
+          <p class="header-status"><span class="status-dot"></span>在线 · 即时响应</p>
         </div>
       </div>
-      <!-- 新增清空按钮 -->
       <div class="header-right">
         <el-button
           type="default"
@@ -20,7 +28,7 @@
           class="clear-btn"
           @click="clearHistory"
         >
-          清空记录
+          清空
         </el-button>
       </div>
     </div>
@@ -29,12 +37,13 @@
     <div class="suggest-questions">
       <div class="suggest-tags">
         <el-tag
-          v-for="q in displayedSuggest"
+          v-for="(q, i) in displayedSuggest"
           :key="q.text"
           :type="q.type"
           class="suggest-tag"
           size="default"
           effect="plain"
+          :style="{ '--tag-idx': i }"
           @click="sendMessage(q.text)"
         >
           {{ q.text }}
@@ -52,36 +61,36 @@
 
     <!-- 对话区域 -->
     <div class="chat-area" ref="chatAreaRef">
-      <div v-for="(msg, idx) in messages" :key="idx" class="message" :class="msg.role">
+      <div v-for="(msg, idx) in messages" :key="idx" class="message" :class="msg.role" :style="{ '--msg-idx': idx }">
         <div class="message-avatar">
           <el-avatar v-if="msg.role === 'user'" :size="36" :src="userAvatarSrc" :icon="!userAvatarSrc ? UserFilled : undefined" />
           <div v-else class="ai-avatar">
-            <el-icon :size="20"><MagicStick /></el-icon>
+            <el-icon :size="18"><MagicStick /></el-icon>
           </div>
         </div>
         <div class="message-content-wrapper">
           <div class="message-content">
             <div class="message-text" v-html="formatMessage(msg.content)"></div>
-            
+
             <!-- 智能操作按钮 -->
             <div v-if="msg.showActions && !msg.isWelcome" class="message-actions">
               <div class="msg-type-badge">
                 <el-tag size="small" type="warning">{{ msg.actionType === 'booking' ? '服务预约' : '事项办理' }}</el-tag>
               </div>
-              <el-button 
+              <el-button
                 v-if="msg.actionType === 'booking'"
-                type="primary" 
-                size="default" 
-                @click="goToBooking(msg.pendingItem)" 
+                type="primary"
+                size="default"
+                @click="goToBooking(msg.pendingItem)"
                 class="action-primary-btn"
               >
                 📅 立即预约
               </el-button>
-              <el-button 
+              <el-button
                 v-else
-                type="primary" 
-                size="default" 
-                @click="handleStartProcess(msg.pendingItem)" 
+                type="primary"
+                size="default"
+                @click="handleStartProcess(msg.pendingItem)"
                 class="action-primary-btn"
               >
                 🚀 开始办理
@@ -91,12 +100,12 @@
           <div class="message-time">{{ msg.time }}</div>
         </div>
       </div>
-      
-      <!-- 加载动画：若正在流式渲染（有 currentStreamingIndex），始终隐藏全局指示器 -->
+
+      <!-- 加载动画 -->
       <div v-if="isLoading && currentStreamingIndex === null" class="message assistant">
         <div class="message-avatar">
           <div class="ai-avatar">
-            <el-icon :size="20"><MagicStick /></el-icon>
+            <el-icon :size="18"><MagicStick /></el-icon>
           </div>
         </div>
         <div class="message-content-wrapper">
@@ -125,15 +134,16 @@
             <el-icon><Promotion /></el-icon>
             Ctrl + Enter 发送
           </div>
-          <el-button 
-            type="primary" 
-            :loading="isLoading" 
+          <el-button
+            type="primary"
+            :loading="isLoading"
             @click="sendMessage()"
             :disabled="!inputMessage.trim()"
             size="default"
             class="send-btn"
           >
-            发送消息
+            <el-icon><Promotion /></el-icon>
+            发送
           </el-button>
         </div>
       </div>
@@ -894,130 +904,189 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 80px);
-  background: #f5f7fa;
-  border-radius: 16px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
 }
 
+/* ====== Header ====== */
 .chat-header {
-  padding: 12px 20px;
-  background: linear-gradient(135deg, var(--gold) 0%, #b38a2f 100%);
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%);
   color: white;
   flex-shrink: 0;
-  /* 新增 flex 布局 */
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  overflow: hidden;
 }
 
-/* 新增头部右侧样式 */
+.chat-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -10%;
+  width: 12rem;
+  height: 12rem;
+  border-radius: 50%;
+  background: rgba(212, 168, 67, 0.08);
+  pointer-events: none;
+}
+
+.chat-header::after {
+  content: '';
+  position: absolute;
+  bottom: -40%;
+  left: 20%;
+  width: 8rem;
+  height: 8rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  pointer-events: none;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  position: relative;
+  z-index: 1;
+}
+
+.header-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  background: rgba(212, 168, 67, 0.2);
+  border: 1px solid rgba(212, 168, 67, 0.3);
+  border-radius: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: icon-glow 3s ease-in-out infinite;
+}
+
+@keyframes icon-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 168, 67, 0); }
+  50% { box-shadow: 0 0 12px 2px rgba(212, 168, 67, 0.15); }
+}
+
+.header-text h2 {
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  margin: 0 0 0.125rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 0.04em;
+}
+
+.header-text p {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin: 0;
+  letter-spacing: 0.06em;
+}
+
 .header-right {
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
-/* 新增清空按钮样式 */
 .clear-btn {
-  color: rgba(255, 255, 255, 0.85) !important;
-  border-color: rgba(255, 255, 255, 0.45) !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  font-size: 0.8125rem !important;
+  border-radius: 2rem !important;
+  backdrop-filter: blur(4px);
+  transition: all 0.25s !important;
 }
 
 .clear-btn:hover {
   color: white !important;
-  border-color: rgba(255, 255, 255, 0.8) !important;
-  background: rgba(255, 255, 255, 0.22) !important;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  background: rgba(255, 255, 255, 0.15) !important;
 }
 
-.header-icon {
-  width: 44px;
-  height: 44px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.header-text h2 {
-  font-size: 18px;
-  margin: 0 0 2px;
-  font-weight: 600;
-  color: white;
-}
-
-.header-text p {
-  font-size: 12px;
-  opacity: 0.85;
-  margin: 0;
-}
-
+/* ====== Suggest Questions ====== */
 .suggest-questions {
-  padding: 10px 20px 12px;
-  background: white;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 0.75rem 1.5rem;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .suggest-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: center;
+}
+
+.suggest-tag {
+  cursor: pointer;
+  transition: all 0.25s;
+  flex-shrink: 0;
+  max-width: 100%;
+  font-size: 0.8125rem !important;
+  padding: 0 0.875rem !important;
+  height: 1.875rem !important;
+  line-height: 1.75rem !important;
+  border-radius: 1.25rem !important;
+  border: 1px solid var(--border-color) !important;
+  background: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+}
+
+.suggest-tag:hover {
+  transform: translateY(-1px);
+  border-color: var(--gold) !important;
+  color: var(--gold) !important;
+  background: rgba(212, 168, 67, 0.06) !important;
+  box-shadow: 0 2px 8px rgba(212, 168, 67, 0.12);
 }
 
 .suggest-toggle {
   cursor: pointer;
   flex-shrink: 0;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 15px;
-  border: 1px solid #d9dce3;
-  background: #fff;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 28px;
-  transition: all 0.2s;
+  height: 1.875rem;
+  padding: 0 0.875rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.75rem;
+  transition: all 0.25s;
 }
 
 .suggest-toggle:hover {
   border-color: var(--gold);
   color: var(--gold);
-  background: #fffaf0;
+  background: rgba(212, 168, 67, 0.04);
 }
 
-.suggest-tag {
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-  max-width: 100%;
-  font-size: 13px !important;
-  padding: 0 12px !important;
-  height: 30px !important;
-  line-height: 28px !important;
-  border-radius: 15px !important;
-}
-
-.suggest-tag:hover {
-  transform: translateY(-1px);
-}
-
+/* ====== Chat Area ====== */
 .chat-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px;
-  background: #f5f7fa;
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-primary);
 }
 
 .message {
   display: flex;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  animation: msg-appear 0.3s ease both;
+}
+
+@keyframes msg-appear {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .message.user {
@@ -1029,14 +1098,15 @@ onBeforeUnmount(() => {
 }
 
 .ai-avatar {
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
   background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
-  border-radius: 18px;
+  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
+  box-shadow: 0 2px 8px rgba(212, 168, 67, 0.2);
 }
 
 .message-content-wrapper {
@@ -1048,45 +1118,57 @@ onBeforeUnmount(() => {
 }
 
 .message-content {
-  padding: 12px 16px;
-  border-radius: 16px;
-  background: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  padding: 0.875rem 1.125rem;
+  border-radius: 1rem;
+  background: var(--card-bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   font-family: var(--font-sans);
+  border: 1px solid var(--border-color);
+  transition: box-shadow 0.2s;
+}
+
+.message-content:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .message.user .message-content {
-  background: linear-gradient(135deg, var(--gold) 0%, #b38a2f 100%);
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%);
   color: white;
+  border-color: transparent;
+  box-shadow: 0 2px 12px rgba(26, 26, 46, 0.2);
 }
 
 .message.assistant .message-content {
-  background: white;
-  color: #333;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-radius: 0.25rem 1rem 1rem 1rem;
+}
+
+.message.user .message-content {
+  border-radius: 1rem 0.25rem 1rem 1rem;
 }
 
 .message-text {
   line-height: 1.7;
-  font-size: 1rem; /* 使用全局 rem 基准，和全局字体一致 */
+  font-size: 1rem;
   font-family: var(--font-sans);
   white-space: normal;
   word-break: break-word;
 }
 
-/* 列表样式 - 关键修复 */
+/* List styles */
 .message-text :deep(ul),
 .message-text :deep(ol) {
-  margin: 8px 0 8px 20px;
+  margin: 0.5rem 0 0.5rem 1.25rem;
   padding-left: 0;
 }
 
 .message-text :deep(li) {
-  margin: 4px 0;
+  margin: 0.25rem 0;
   line-height: 1.6;
   font-size: 1rem;
 }
 
-/* 确保列表项正确显示 */
 .message-text :deep(ul.msg-list),
 .message-text :deep(ol.msg-list) {
   display: block;
@@ -1097,7 +1179,6 @@ onBeforeUnmount(() => {
   list-style-type: decimal;
 }
 
-/* 加粗样式 */
 .message-text :deep(strong) {
   font-weight: 600;
   color: inherit;
@@ -1106,43 +1187,47 @@ onBeforeUnmount(() => {
 }
 
 .message-text :deep(.msg-heading) {
-  margin: 12px 0 6px;
+  margin: 0.75rem 0 0.375rem;
   font-weight: 700;
   color: var(--text-primary);
   font-size: 1.02rem;
 }
 
 .message-text :deep(.msg-subheading) {
-  margin: 10px 0 4px;
+  margin: 0.625rem 0 0.25rem;
   color: var(--text-primary);
   font-size: 0.98rem;
 }
 
+.message-text :deep(.msg-paragraph) {
+  margin: 0.375rem 0;
+}
+
 .message-text :deep(.msg-table-wrap) {
   overflow-x: auto;
-  margin: 10px 0;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
+  margin: 0.625rem 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
 }
 
 .message-text :deep(.msg-table) {
   width: 100%;
   border-collapse: collapse;
   min-width: 520px;
-  font-size: 0.94rem;
+  font-size: 0.875rem;
   white-space: normal;
 }
 
 .message-text :deep(.msg-table th),
 .message-text :deep(.msg-table td) {
-  padding: 9px 10px;
-  border-bottom: 1px solid #ebeef5;
+  padding: 0.5rem 0.625rem;
+  border-bottom: 1px solid var(--border-color);
   text-align: left;
   vertical-align: top;
 }
 
 .message-text :deep(.msg-table th) {
-  background: #f8f6ef;
+  background: var(--bg-tertiary);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -1155,77 +1240,83 @@ onBeforeUnmount(() => {
   color: #fff;
 }
 
-/* 时间 */
+/* Time stamp */
 .message-time {
-  font-size: 11px;
-  color: #999;
-  margin-top: 4px;
-  padding: 0 8px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  padding: 0 0.5rem;
 }
 
-/* 按钮区域 */
+/* Action buttons */
 .message-actions {
-  margin-top: 14px;
-  padding-top: 10px;
-  border-top: 1px solid #f0f0f0;
+  margin-top: 0.875rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: center;
+  position: relative;
 }
 
 .msg-type-badge {
   position: absolute;
-  left: 16px;
-  top: -10px;
+  left: 0.5rem;
+  top: -0.625rem;
 }
 
 .msg-type-badge :deep(.el-tag) {
-  font-size: 12px;
+  font-size: 0.6875rem;
 }
 
 .action-primary-btn {
   background: linear-gradient(135deg, var(--gold) 0%, #b38a2f 100%) !important;
   border: none !important;
   color: white !important;
-  font-size: 14px !important;
+  font-size: 0.875rem !important;
   font-weight: 500 !important;
-  padding: 10px 28px !important;
+  padding: 0.625rem 1.75rem !important;
   height: auto !important;
-  border-radius: 30px !important;
+  border-radius: 2rem !important;
   transition: all 0.3s ease !important;
-  box-shadow: 0 2px 8px rgba(180, 138, 47, 0.28) !important;
+  box-shadow: 0 2px 8px rgba(180, 138, 47, 0.25) !important;
+  letter-spacing: 0.03em !important;
 }
 
 .action-primary-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(180, 138, 47, 0.36) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px rgba(180, 138, 47, 0.35) !important;
   background: linear-gradient(135deg, #b38a2f 0%, #d4a843 100%) !important;
 }
 
-/* 输入区域 */
+/* ====== Input Area ====== */
 .chat-input-area {
-  padding: 12px 20px;
-  background: white;
-  border-top: 1px solid #e8e8e8;
+  padding: 0.875rem 1.5rem;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 
 .input-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 :deep(.el-textarea__inner) {
   font-size: 1rem !important;
   font-family: var(--font-sans) !important;
   line-height: 1.5 !important;
-  border-radius: 12px !important;
-  border-color: #e8e8e8 !important;
+  border-radius: var(--radius-md) !important;
+  border-color: var(--border-color) !important;
+  background: var(--bg-tertiary) !important;
+  padding: 0.75rem 1rem !important;
+  transition: all 0.25s !important;
 }
 
 :deep(.el-textarea__inner):focus {
   border-color: var(--gold) !important;
-  box-shadow: 0 0 0 2px rgba(212, 168, 67, 0.12) !important;
+  box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.1) !important;
+  background: var(--card-bg) !important;
 }
 
 .input-actions {
@@ -1235,99 +1326,106 @@ onBeforeUnmount(() => {
 }
 
 .input-hint {
-  font-size: 12px;
-  color: #999;
+  font-size: 0.75rem;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
 }
 
 .send-btn {
-  background: linear-gradient(135deg, var(--gold) 0%, #b38a2f 100%) !important;
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%) !important;
   border: none !important;
   color: white !important;
-  padding: 6px 20px !important;
-  font-size: 1rem !important;
-  height: 34px !important;
-  border-radius: 20px !important;
+  padding: 0.375rem 1.5rem !important;
+  font-size: 0.875rem !important;
+  height: 2.125rem !important;
+  border-radius: 2rem !important;
+  transition: all 0.25s !important;
+  letter-spacing: 0.04em !important;
 }
 
 .send-btn:hover {
-  background: linear-gradient(135deg, #b38a2f 0%, #d4a843 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(26, 26, 46, 0.25) !important;
 }
 
-/* 打字动画 */
+.send-btn:disabled {
+  opacity: 0.5 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ====== Typing Indicator ====== */
 .typing-indicator {
   display: flex;
-  gap: 4px;
-  padding: 6px 0;
+  gap: 0.3rem;
+  padding: 0.375rem 0;
+  align-items: center;
 }
 
 .typing-indicator span {
-  width: 8px;
-  height: 8px;
-  background: #999;
+  width: 0.5rem;
+  height: 0.5rem;
+  background: var(--gold);
   border-radius: 50%;
-  animation: typing 1.4s infinite;
+  animation: typing-bounce 1.4s infinite;
 }
 
-.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
 
-@keyframes typing {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.3; }
   30% { transform: translateY(-6px); opacity: 1; }
 }
 
-@media (max-width: 768px) {
+/* ====== Responsive ====== */
+@media (max-width: 48rem) {
   .ai-guide-container {
     width: 100%;
     max-width: 100%;
     height: calc(100vh - 60px);
     border-radius: 0;
+    border: none;
   }
-  
+
   .chat-header {
-    padding: 10px 16px;
+    padding: 0.75rem 1rem;
   }
-  
+
   .chat-area {
-    padding: 12px 16px;
+    padding: 0.875rem 1rem;
   }
 
   .suggest-questions {
-    padding: 8px 12px 10px;
+    padding: 0.5rem 1rem;
   }
 
   .suggest-tags {
-    gap: 6px;
+    gap: 0.375rem;
   }
 
   .suggest-tag,
   .suggest-toggle {
-    height: 28px !important;
-    line-height: 26px !important;
-    font-size: 12px !important;
-    padding: 0 10px !important;
+    height: 1.75rem !important;
+    line-height: 1.625rem !important;
+    font-size: 0.75rem !important;
+    padding: 0 0.625rem !important;
   }
-  
+
   .chat-input-area {
-    padding: 10px 16px;
+    padding: 0.625rem 1rem;
   }
-  
+
   .message-content-wrapper,
   .message.user .message-content-wrapper {
     max-width: 85%;
   }
-  
-  .message-text {
-    font-size: 14px;
-  }
-  
+
   .action-primary-btn {
-    padding: 8px 20px !important;
-    font-size: 13px !important;
+    padding: 0.5rem 1.25rem !important;
+    font-size: 0.8125rem !important;
   }
 }
-
 </style>

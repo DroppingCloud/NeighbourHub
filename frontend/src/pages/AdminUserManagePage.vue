@@ -289,24 +289,22 @@ onMounted(loadUsers)
 
 <style scoped>
 .user-management-container {
-  max-width: 76rem;
+  max-width: 75rem;
   margin: 0 auto;
-  padding: 32px;
-  background-color: #fcf9f0;
-  min-height: 100vh;
 }
 .page-header {
-  margin-bottom: 24px;
+  margin-bottom: 1.75rem;
 }
 .page-header h2 {
-  font-size: 28px;
-  margin: 0 0 8px;
-  color: #222;
-  font-weight: 600;
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  margin: 0 0 0.375rem;
+  color: var(--text-primary);
+  font-weight: 700;
 }
 .page-header p {
-  color: #777;
-  font-size: 15px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
   margin: 0;
 }
 

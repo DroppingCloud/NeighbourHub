@@ -81,13 +81,12 @@ function handleCancel(id: number) {
 
 <style scoped>
 .bookings-container {
-  max-width: 50rem;
+  max-width: 75rem;
   margin: 0 auto;
-  padding: 0 1rem;
 }
 
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {

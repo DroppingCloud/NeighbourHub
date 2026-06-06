@@ -354,18 +354,20 @@ function normalizeRole(value: string) {
 }
 
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .page-header p {
   color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .profile-card,
@@ -373,8 +375,8 @@ function normalizeRole(value: string) {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
-  padding: 2.25rem 2rem;
-  margin-bottom: 2rem;
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.75rem;
 }
 
 .avatar-block {

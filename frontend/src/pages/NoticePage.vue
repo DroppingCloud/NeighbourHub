@@ -77,23 +77,21 @@ onMounted(() => {
 
 <style scoped>
 .notifications-container {
-  max-width: 50rem;
+  max-width: 75rem;
   margin: 0 auto;
-  padding: 0 1.25rem;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 0.0625rem solid var(--border-color);
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin: 0;
 }

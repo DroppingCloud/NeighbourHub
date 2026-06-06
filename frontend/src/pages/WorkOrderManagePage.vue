@@ -378,12 +378,12 @@ onMounted(loadWorkOrders)
 
 <style scoped>
 .page-container {
-  max-width: 56.25rem;
+  max-width: 75rem;
   margin: 0 auto;
 }
 
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {

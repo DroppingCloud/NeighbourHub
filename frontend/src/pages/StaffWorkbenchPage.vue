@@ -201,14 +201,15 @@ async function quickDispatch(booking: BookingVO) {
 }
 
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .page-header p {
@@ -218,9 +219,9 @@ async function quickDispatch(booking: BookingVO) {
 
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
 }
 
 .stat-card {
@@ -298,7 +299,7 @@ async function quickDispatch(booking: BookingVO) {
 }
 
 .quick-actions-section {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .section-title {
@@ -310,8 +311,8 @@ async function quickDispatch(booking: BookingVO) {
 
 .action-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 1.25rem;
 }
 
 .action-card {
@@ -358,8 +359,8 @@ async function quickDispatch(booking: BookingVO) {
 .recent-section {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.75rem;
   box-shadow: var(--shadow-sm);
 }
 

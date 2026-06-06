@@ -322,18 +322,20 @@ onMounted(() => {
 
 <style scoped>
 .settings-container {
-  max-width: 56.25rem;
+  max-width: 75rem;
   margin: 0 auto;
 }
 
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .page-header p {
