@@ -1,4 +1,6 @@
-﻿<template>
+﻿<!-- frontend/src/components/NotificationBell.vue -->
+
+<template>
   <el-popover
     ref="popoverRef"
     placement="bottom-end"
@@ -46,6 +48,7 @@
                 <Warning v-if="item.type === 'supplement'" />
                 <CircleCheck v-if="item.type === 'audit'" />
                 <Service v-if="item.type === 'service'" />
+                <StarFilled v-if="item.type === 'evaluation'" />
               </el-icon>
             </div>
             <div class="notification-content">
@@ -75,7 +78,7 @@
 import { computed, onMounted, ref, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Bell, Warning, CircleCheck, Service, Right } from '@element-plus/icons-vue'
+import { Bell, Warning, CircleCheck, Service, Right, StarFilled } from '@element-plus/icons-vue'
 import { useNotificationStore } from '@/stores/notification'
 import { useAuthStore } from '@/stores/auth'
 
@@ -95,7 +98,7 @@ function formatTime(time: string) {
 async function handleNotificationClick(item: any) {
   await notificationStore.markAsRead(item.id)
   closePopover()
-  router.push('/notice')
+  await router.push({ path: '/notice', query: { highlightId: item.id } })
 }
 
 async function handleMarkAllRead() {
@@ -255,6 +258,12 @@ watch(() => auth.token, (val) => {
 .notification-icon.service {
   background: rgba(212, 168, 67, 0.12);
   color: var(--gold);
+}
+
+/* 🔴 新增：评价通知样式 */
+.notification-icon.evaluation {
+  background: rgba(255, 193, 7, 0.12);
+  color: #f5a623;
 }
 
 .notification-content {

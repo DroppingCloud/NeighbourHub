@@ -221,7 +221,7 @@ async function saveProfile() {
     if (fileInput.value) fileInput.value.value = ''
     
     // 更新 store 中的用户信息
-    authStore.setUserInfo(authStore.userInfo ? { ...authStore.userInfo, realName: form.realName, role: currentRole.value, avatar: avatarSrc.value } : authStore.userInfo)
+    authStore.setUserInfo(authStore.userInfo ? { ...authStore.userInfo, realName: form.realName, role: currentRole.value, avatar: refreshed.avatar } : authStore.userInfo)
     
     ElMessage.success('个人信息已保存')
   } catch (error) {
@@ -325,7 +325,7 @@ async function onFileChange(e: Event) {
       currentObjectUrl = null
     }
     
-    authStore.setUserInfo({ ...(authStore.userInfo as any), avatar: avatarSrc.value })
+    authStore.setUserInfo({ ...(authStore.userInfo as any), avatar: refreshed.avatar })
     ElMessage.success('头像上传成功')
   } catch (err) {
     console.error(err)
@@ -354,7 +354,7 @@ function syncRoleFromMe(me: UserInfoVO) {
       ...authStore.userInfo,
       role: currentRole.value,
       realName: me.realName || authStore.userInfo.realName,
-      avatar: avatarSrc.value || authStore.userInfo.avatar
+      avatar: me.avatar || authStore.userInfo.avatar
     })
   }
 }

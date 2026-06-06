@@ -11,6 +11,8 @@ export interface LoginResponse {
   username: string
   roles: string[]
   staffType?: string
+  bookingServiceType?: string
+  avatar?: string
 }
 
 export interface RegisterRequest {
@@ -37,6 +39,7 @@ export interface UserInfoVO {
   birthday?: string
   avatar?: string
   staffType?: string
+  bookingServiceType?: string
 }
 
 export const login = (data: LoginRequest): Promise<LoginResponse> =>

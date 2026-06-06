@@ -70,13 +70,13 @@ export interface ServiceBooking {
 // 通知消息
 export interface Notification {
   id: string
-  type: 'progress' | 'supplement' | 'audit' | 'service'
+  type: 'progress' | 'supplement' | 'audit' | 'service' | 'evaluation' 
   title: string
   content: string
   isRead: boolean
   sendTime: string
   relatedId?: string
-  relatedType?: 'application' | 'booking'
+  relatedType?: 'application' | 'booking' | 'work_order' | 'proxy'
 }
 
 // 家属绑定

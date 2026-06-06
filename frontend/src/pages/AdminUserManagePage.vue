@@ -65,7 +65,7 @@
         :data="filteredUsers"
         stripe
         v-loading="loading"
-        :header-cell-style="{ background: '#f3efe6', color: '#333', fontWeight: 500 }"
+        :header-cell-style="tableHeaderStyle"
       >
         <el-table-column prop="userId" label="ID" width="70" />
         <el-table-column prop="username" label="登录账号" min-width="120" />
@@ -85,6 +85,15 @@
             <el-tag :type="row.staffType === 'booking' ? 'warning' : 'primary'" effect="plain">
               {{ staffTypeText(row.staffType) }}
             </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column v-if="activeRole === 'staff'" label="服务类型" width="130" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.staffType === 'booking'" type="success" effect="plain">
+              {{ bookingServiceTypeText(row.bookingServiceType) }}
+            </el-tag>
+            <span v-else class="muted-text">-</span>
           </template>
         </el-table-column>
 
@@ -148,6 +157,20 @@
         <el-form-item label="工作人员类型" prop="staffType">
           <el-segmented v-model="staffForm.staffType" :options="staffTypeOptions" />
         </el-form-item>
+        <el-form-item
+          v-if="staffForm.staffType === 'booking'"
+          label="服务类型"
+          prop="bookingServiceType"
+        >
+          <el-select v-model="staffForm.bookingServiceType" placeholder="请选择服务类型" class="full-select">
+            <el-option
+              v-for="item in bookingServiceTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
 
       <template #footer>
@@ -165,6 +188,9 @@
           </div>
           <el-tag :type="activeStaff.staffType === 'booking' ? 'warning' : 'primary'" effect="plain">
             {{ staffTypeText(activeStaff.staffType) }}
+          </el-tag>
+          <el-tag v-if="activeStaff.staffType === 'booking'" type="success" effect="plain">
+            {{ bookingServiceTypeText(activeStaff.bookingServiceType) }}
           </el-tag>
         </div>
 
@@ -229,6 +255,7 @@ interface UserRow {
   phone?: string
   role: string
   staffType?: string
+  bookingServiceType?: string
   communityId?: number
   status: string
   createTime: string
@@ -270,13 +297,20 @@ const staffTypeOptions = [
   { label: '服务预约', value: 'booking' }
 ]
 
+const bookingServiceTypeOptions = [
+  { label: '助餐服务', value: 'dining' },
+  { label: '陪诊服务', value: 'accompany' },
+  { label: '上门服务', value: 'home_visit' }
+]
+
 const staffForm = ref<StaffCreateRequest>({
   username: '',
   realName: '',
   phone: '',
   email: '',
   communityId: 1,
-  staffType: 'application'
+  staffType: 'application',
+  bookingServiceType: 'dining'
 })
 
 const staffFormRules = {
@@ -288,7 +322,8 @@ const staffFormRules = {
   phone: [
     { pattern: /^$|^1[3-9]\d{9}$/, message: '手机号格式错误', trigger: 'blur' }
   ],
-  staffType: [{ required: true, message: '请选择工作人员类型', trigger: 'change' }]
+  staffType: [{ required: true, message: '请选择工作人员类型', trigger: 'change' }],
+  bookingServiceType: [{ required: true, message: '请选择服务类型', trigger: 'change' }]
 }
 
 const filteredUsers = computed(() => {
@@ -318,6 +353,13 @@ function staffTypeText(type?: string) {
   return '未设置'
 }
 
+function bookingServiceTypeText(type?: string) {
+  if (type === 'dining') return '助餐服务'
+  if (type === 'accompany') return '陪诊服务'
+  if (type === 'home_visit') return '上门服务'
+  return '未设置'
+}
+
 function roleText(role?: string) {
   if (role === 'staff') return '工作人员'
   if (role === 'family') return '家属'
@@ -330,6 +372,15 @@ function roleTagType(role?: string) {
   if (role === 'family') return 'warning'
   if (role === 'admin') return 'danger'
   return 'success'
+}
+
+function tableHeaderStyle() {
+  const styles = getComputedStyle(document.documentElement)
+  return {
+    background: styles.getPropertyValue('--bg-tertiary').trim(),
+    color: styles.getPropertyValue('--text-primary').trim(),
+    fontWeight: 500
+  }
 }
 
 async function loadUsers() {
@@ -350,7 +401,8 @@ function resetForm() {
     phone: '',
     email: '',
     communityId: 1,
-    staffType: 'application'
+    staffType: 'application',
+    bookingServiceType: 'dining'
   }
   staffFormRef.value?.resetFields()
 }
@@ -360,7 +412,11 @@ async function saveStaff() {
     if (!valid) return
     submitting.value = true
     try {
-      await createStaff(staffForm.value)
+      const payload = { ...staffForm.value }
+      if (payload.staffType !== 'booking') {
+        payload.bookingServiceType = undefined
+      }
+      await createStaff(payload)
       ElMessage.success('工作人员账号已创建，初始密码为 123456')
       showAddDialog.value = false
       await loadUsers()
@@ -432,7 +488,7 @@ onMounted(loadUsers)
   max-width: 75rem;
   margin: 0 auto;
   padding: 2rem;
-  background-color: #fcf9f0;
+  background-color: var(--bg-primary);
   min-height: 100vh;
 }
 
@@ -462,13 +518,13 @@ onMounted(loadUsers)
 }
 
 .role-tab {
-  border: 1px solid #e2ddd2;
-  background: #fff;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
   border-radius: 0.75rem;
   padding: 1rem 1.25rem;
   text-align: left;
   cursor: pointer;
-  color: #555b75;
+  color: var(--text-secondary);
   transition: all 0.2s ease;
 }
 
@@ -479,19 +535,19 @@ onMounted(loadUsers)
 
 .role-tab span {
   font-size: 1.05rem;
-  color: #11142b;
+  color: var(--text-primary);
   font-weight: 600;
   margin-bottom: 0.35rem;
 }
 
 .role-tab small {
   font-size: 0.85rem;
-  color: #858ba8;
+  color: var(--text-muted);
 }
 
 .role-tab.active {
-  border-color: #d4a843;
-  background: #f5efe1;
+  border-color: var(--gold);
+  background: var(--bg-tertiary);
   box-shadow: 0 0.25rem 1rem rgba(212, 168, 67, 0.16);
 }
 
@@ -501,7 +557,7 @@ onMounted(loadUsers)
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
-  background: #fff;
+  background: var(--card-bg);
   padding: 1.25rem 1.5rem;
   border-radius: 0.875rem;
   box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.05);
@@ -527,15 +583,23 @@ onMounted(loadUsers)
   width: 13rem;
 }
 
+.full-select {
+  width: 100%;
+}
+
+.muted-text {
+  color: var(--text-muted);
+}
+
 .btn-dark {
-  background-color: #222633 !important;
+  background-color: var(--ink) !important;
   color: #fff !important;
   border: none !important;
   border-radius: 0.5rem !important;
 }
 
 .table-card {
-  background: #fff;
+  background: var(--card-bg);
   border-radius: 0.875rem;
   box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.05);
   overflow: hidden;
@@ -563,7 +627,7 @@ onMounted(loadUsers)
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background: #f5efe1;
+  background: var(--bg-tertiary);
   border-radius: 0.75rem;
 }
 
@@ -574,12 +638,12 @@ onMounted(loadUsers)
 
 .staff-summary strong {
   margin-top: 0.25rem;
-  color: #11142b;
+  color: var(--text-primary);
   font-size: 1.1rem;
 }
 
 .staff-summary .muted {
-  color: #858ba8;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -591,9 +655,9 @@ onMounted(loadUsers)
 
 .business-stats div {
   padding: 1rem;
-  border: 1px solid #e2ddd2;
+  border: 1px solid var(--border-color);
   border-radius: 0.75rem;
-  background: #fff;
+  background: var(--card-bg);
   text-align: center;
 }
 
@@ -603,12 +667,12 @@ onMounted(loadUsers)
 }
 
 .business-stats strong {
-  color: #11142b;
+  color: var(--text-primary);
   font-size: 1.5rem;
 }
 
 .business-stats span {
-  color: #858ba8;
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -620,7 +684,7 @@ onMounted(loadUsers)
 
 .business-columns h4 {
   margin: 0 0 0.75rem;
-  color: #11142b;
+  color: var(--text-primary);
 }
 
 .business-item {
@@ -628,21 +692,21 @@ onMounted(loadUsers)
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.875rem;
-  border: 1px solid #e2ddd2;
+  border: 1px solid var(--border-color);
   border-radius: 0.75rem;
   margin-bottom: 0.75rem;
-  background: #fff;
+  background: var(--card-bg);
 }
 
 .business-item strong {
   display: block;
-  color: #11142b;
+  color: var(--text-primary);
   margin-bottom: 0.25rem;
 }
 
 .business-item p {
   margin: 0;
-  color: #858ba8;
+  color: var(--text-muted);
   font-size: 0.85rem;
   line-height: 1.5;
 }

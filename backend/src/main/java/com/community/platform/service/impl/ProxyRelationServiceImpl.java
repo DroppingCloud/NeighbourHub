@@ -135,6 +135,15 @@ public class ProxyRelationServiceImpl implements ProxyRelationService {
         relation.setAuthorizedActions(normalizeAuthorizedActions(dto.getAuthorizedActions()));
         relation.setStatus("active");
         proxyRelationMapper.insert(relation);
+
+        if (relation.getTargetUserId() != null) {
+            noticeService.sendNotice(relation.getTargetUserId(), "家属代办关系已建立",
+                    "用户 " + getUsername(proxyUserId) + " 已成为您的家属代办人。",
+                    "proxy", "proxy", relation.getId());
+        }
+        noticeService.sendNotice(proxyUserId, "家属代办关系已建立",
+                "您已成功建立家属代办关系。",
+                "proxy", "proxy", relation.getId());
         return relation.getId();
     }
 
@@ -157,6 +166,17 @@ public class ProxyRelationServiceImpl implements ProxyRelationService {
         }
         relation.setStatus("revoked");
         proxyRelationMapper.updateById(relation);
+
+        if (relation.getProxyUserId() != null && !relation.getProxyUserId().equals(userId)) {
+            noticeService.sendNotice(relation.getProxyUserId(), "家属代办关系已解除",
+                    "一条家属代办授权关系已被解除。",
+                    "proxy", "proxy", id);
+        }
+        if (relation.getTargetUserId() != null && !relation.getTargetUserId().equals(userId)) {
+            noticeService.sendNotice(relation.getTargetUserId(), "家属代办关系已解除",
+                    "一条家属代办授权关系已被解除。",
+                    "proxy", "proxy", id);
+        }
     }
 
     private String normalizeAuthorizedActions(String actions) {

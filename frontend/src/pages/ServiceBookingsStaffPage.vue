@@ -26,7 +26,13 @@
 
     <el-tabs v-model="activeTab" class="dispatch-tabs" @tab-change="loadBookings">
       <el-tab-pane label="待调度" name="pending">
-        <div v-for="booking in pendingBookings" :key="booking.bookingId" class="dispatch-card">
+        <div
+          v-for="booking in pendingBookings"
+          :key="booking.bookingId"
+          :id="`booking-${booking.bookingId}`"
+          class="dispatch-card"
+          :class="{ highlighted: highlightedBookingId === String(booking.bookingId) }"
+        >
           <BookingInfo :booking="booking" />
           <div class="card-actions">
             <el-button type="primary" size="small" @click="claim(booking.bookingId)">
@@ -39,7 +45,13 @@
       </el-tab-pane>
 
       <el-tab-pane label="已接取" name="confirmed">
-        <div v-for="booking in confirmedBookings" :key="booking.bookingId" class="dispatch-card">
+        <div
+          v-for="booking in confirmedBookings"
+          :key="booking.bookingId"
+          :id="`booking-${booking.bookingId}`"
+          class="dispatch-card"
+          :class="{ highlighted: highlightedBookingId === String(booking.bookingId) }"
+        >
           <BookingInfo :booking="booking" />
           <div class="card-actions">
             <el-button type="warning" size="small" @click="start(booking.bookingId)">
@@ -52,7 +64,13 @@
       </el-tab-pane>
 
       <el-tab-pane label="服务中" name="in_progress">
-        <div v-for="booking in inProgressBookings" :key="booking.bookingId" class="dispatch-card">
+        <div
+          v-for="booking in inProgressBookings"
+          :key="booking.bookingId"
+          :id="`booking-${booking.bookingId}`"
+          class="dispatch-card"
+          :class="{ highlighted: highlightedBookingId === String(booking.bookingId) }"
+        >
           <BookingInfo :booking="booking" />
           <div class="card-actions">
             <el-button type="success" size="small" @click="completeService(booking.bookingId)">
@@ -65,7 +83,13 @@
       </el-tab-pane>
 
       <el-tab-pane label="已完成" name="completed">
-        <div v-for="booking in completedBookings" :key="booking.bookingId" class="dispatch-card">
+        <div
+          v-for="booking in completedBookings"
+          :key="booking.bookingId"
+          :id="`booking-${booking.bookingId}`"
+          class="dispatch-card"
+          :class="{ highlighted: highlightedBookingId === String(booking.bookingId) }"
+        >
           <BookingInfo :booking="booking" />
           <div class="card-actions">
             <el-button type="info" size="small" @click="showFeedback(booking)">
@@ -81,7 +105,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, ref } from 'vue'
+import { computed, defineComponent, h, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleCheck, Position, VideoPlay, ChatLineSquare } from '@element-plus/icons-vue'
 import {
@@ -92,8 +117,11 @@ import {
   type BookingVO
 } from '@/api/booking'
 
-const activeTab = ref('pending')
+const route = useRoute()
+const validTabs = ['pending', 'confirmed', 'in_progress', 'completed']
+const activeTab = ref(validTabs.includes(String(route.query.tab || '')) ? String(route.query.tab) : 'pending')
 const bookings = ref<BookingVO[]>([])
+const highlightedBookingId = computed(() => String(route.query.highlightId || ''))
 // removed selectedStaff: claim model, each staff claims pending bookings
 
 // 统计数据
@@ -149,6 +177,7 @@ async function loadBookings() {
                  activeTab.value === 'completed' ? 'completed' : undefined
   const page = await getStaffBookingList(1, 100, status)
   bookings.value = page.records || []
+  scrollToHighlightedBooking()
 }
 
 async function loadStatistics() {
@@ -215,8 +244,48 @@ function showFeedback(booking: BookingVO) {
   })
 }
 
+watch(() => route.query.tab, (tab) => {
+  const nextTab = String(tab || '')
+  if (validTabs.includes(nextTab) && activeTab.value !== nextTab) {
+    activeTab.value = nextTab
+    loadBookings()
+  }
+})
+
+watch(() => route.query.highlightId, () => {
+  locateHighlightedBooking()
+})
+
+async function locateHighlightedBooking() {
+  const id = highlightedBookingId.value
+  if (!id) return
+  for (const status of validTabs) {
+    const page = await getStaffBookingList(1, 100, status)
+    const records = page.records || []
+    if (records.some((item: BookingVO) => String(item.bookingId) === id)) {
+      activeTab.value = status
+      bookings.value = records
+      await scrollToHighlightedBooking()
+      return
+    }
+  }
+}
+
+async function scrollToHighlightedBooking() {
+  if (!highlightedBookingId.value) return
+  await nextTick()
+  document.getElementById(`booking-${highlightedBookingId.value}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  })
+}
+
 onMounted(() => {
-  loadBookings()
+  if (highlightedBookingId.value) {
+    locateHighlightedBooking()
+  } else {
+    loadBookings()
+  }
   loadStatistics()
 })
 </script>
@@ -285,6 +354,11 @@ onMounted(() => {
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
   border: 0.0625rem solid var(--border-color);
+}
+
+.dispatch-card.highlighted {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 0.1875rem rgba(212, 168, 67, 0.18);
 }
 
 :deep(.card-header) {

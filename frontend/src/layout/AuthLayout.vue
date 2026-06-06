@@ -204,7 +204,7 @@ onMounted(() => {
 .auth-layout {
   display: flex;
   min-height: 100vh;
-  background: var(--paper);
+  background: var(--bg-primary);
   position: relative;
 }
 
@@ -568,7 +568,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   padding: 2.5rem;
-  background: var(--paper);
+  background: var(--bg-primary);
 }
 
 .right-inner {

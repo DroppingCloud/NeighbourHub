@@ -48,6 +48,7 @@ function getStatusType(status: string) {
   const map: Record<string, string> = {
     pending: 'info',
     confirmed: 'warning',
+    in_progress: 'primary',
     processing: 'primary',
     completed: 'success',
     cancelled: 'danger'
@@ -59,6 +60,7 @@ function getStatusText(status: string) {
   const map: Record<string, string> = {
     pending: '待调度',
     confirmed: '已确认',
+    in_progress: '服务中',
     processing: '服务中',
     completed: '已完成',
     cancelled: '已取消'

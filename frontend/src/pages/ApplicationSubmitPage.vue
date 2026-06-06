@@ -857,10 +857,12 @@ async function loadServices() {
       materials: getFallbackMaterials(item),
       process: parseSteps(item.processSteps)
     }))
+    const targetId = Number(route.query.serviceId || route.query.itemId || 0)
     const targetName = String(route.query.itemName || '')
-    if (targetName) {
+    if (targetId || targetName) {
       const target = govServices.value.find(service =>
-        targetName.includes(service.name) || service.name.includes(targetName)
+        (targetId && Number(service.id) === targetId)
+        || (targetName && (targetName.includes(service.name) || service.name.includes(targetName)))
       )
       if (target) {
         await selectService(target)

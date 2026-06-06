@@ -10,10 +10,17 @@
       <el-tab-pane label="已通过" name="approved" />
       <el-tab-pane label="需补件" name="supplement_required" />
       <el-tab-pane label="已完成" name="completed" />
+      <el-tab-pane label="已驳回" name="rejected" />
     </el-tabs>
 
     <div v-loading="loading" class="work-list">
-      <div v-for="order in workOrders" :key="order.orderId" class="work-card">
+      <div
+        v-for="order in workOrders"
+        :key="order.orderId"
+        :id="`work-order-${order.orderId}`"
+        class="work-card"
+        :class="{ highlighted: highlightedOrderId === String(order.orderId) }"
+      >
         <div class="card-header">
           <span class="title">{{ order.itemName || `申请 ${order.applicationId}` }}</span>
           <el-tag :type="getStatusType(order.status)">{{ order.statusLabel || order.status }}</el-tag>
@@ -180,17 +187,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { auditWorkOrder, getWorkOrderList, type AuditRequest, type WorkOrderVO } from '@/api/workOrder'
 import { getApplicationMaterialFileUrl, type ApplicationMaterialVO } from '@/api/application'
 
-const activeTab = ref('pending')
+const route = useRoute()
+const validTabs = ['pending', 'approved', 'supplement_required', 'completed', 'rejected']
+const activeTab = ref(validTabs.includes(String(route.query.tab || '')) ? String(route.query.tab) : 'pending')
 //const activeTab = ref('')
 const loading = ref(false)
 const workOrders = ref<WorkOrderVO[]>([])
 const detailDialogVisible = ref(false)
 const activeOrder = ref<WorkOrderVO | null>(null)
+const highlightedOrderId = computed(() => String(route.query.highlightId || ''))
 
 const formRows = computed(() => {
   const data = parseFormData(activeOrder.value?.formData)
@@ -226,6 +237,7 @@ async function loadWorkOrders() {
     }
     const page = await getWorkOrderList(params)
     workOrders.value = page.records || []
+    scrollToHighlightedOrder()
   } finally {
     loading.value = false
   }
@@ -373,7 +385,54 @@ async function audit(order: WorkOrderVO, action: AuditRequest['action']) {
   await loadWorkOrders()
 }
 
-onMounted(loadWorkOrders)
+watch(() => route.query.tab, (tab) => {
+  const nextTab = String(tab || '')
+  if (validTabs.includes(nextTab) && activeTab.value !== nextTab) {
+    activeTab.value = nextTab
+    loadWorkOrders()
+  }
+})
+
+watch(() => route.query.highlightId, () => {
+  locateHighlightedOrder()
+})
+
+async function locateHighlightedOrder() {
+  const id = highlightedOrderId.value
+  if (!id) return
+  loading.value = true
+  try {
+    for (const status of validTabs) {
+      const page = await getWorkOrderList({ pageNum: 1, pageSize: 100, status })
+      const records = page.records || []
+      if (records.some((item: WorkOrderVO) => String(item.orderId) === id)) {
+        activeTab.value = status
+        workOrders.value = records
+        await scrollToHighlightedOrder()
+        return
+      }
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
+async function scrollToHighlightedOrder() {
+  if (!highlightedOrderId.value) return
+  await nextTick()
+  document.getElementById(`work-order-${highlightedOrderId.value}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  })
+}
+
+onMounted(() => {
+  if (highlightedOrderId.value) {
+    locateHighlightedOrder()
+  } else {
+    loadWorkOrders()
+  }
+})
 </script>
 
 <style scoped>
@@ -407,6 +466,11 @@ onMounted(loadWorkOrders)
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
   box-shadow: var(--shadow-sm);
+}
+
+.work-card.highlighted {
+  box-shadow: 0 0 0 0.1875rem rgba(212, 168, 67, 0.2), var(--shadow-sm);
+  border: 0.0625rem solid var(--gold);
 }
 
 .card-header {

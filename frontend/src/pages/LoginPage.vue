@@ -267,7 +267,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
@@ -377,20 +377,29 @@ async function handleLogin() {
 
     loading.value = true
     try {
-      // determine username to send
-      // handle SMS-code login (simulated): call backend SMS login endpoint
+      // 处理短信登录
       if (loginMode.value === 'phone-code') {
         try {
           const res = await loginBySms({ phone: form.value.phone, code: form.value.code })
-          authStore.setToken(res.token)
+          // 🔴 关键修改：传递 rememberMe.value
+          authStore.setToken(res.token, rememberMe.value)
           authStore.setUserInfo({
             userId: String(res.userId),
             username: res.username,
             phone: form.value.phone,
             role: (res.roles && res.roles[0]) ? res.roles[0].replace(/^ROLE_/, '').toLowerCase() : 'resident',
-            staffType: res.staffType
+            staffType: res.staffType,
+            bookingServiceType: res.bookingServiceType,
+            avatar: res.avatar
           })
           ElMessage.success('登录成功，欢迎回来！')
+          
+          // 保存登录凭证（记住账号功能）
+          if (rememberMe.value) {
+            saveCredentials()
+          }
+          
+          // 跳转逻辑
           const role = authStore.userInfo?.role
           if (role === 'staff') {
             router.push('/staff/workbench')
@@ -400,7 +409,6 @@ async function handleLogin() {
             router.push('/home')
           }
         } catch (err: any) {
-          // rely on global interceptor to show auth-related messages (401/403)
           console.warn('SMS 登录失败', err)
         } finally {
           loading.value = false
@@ -408,21 +416,31 @@ async function handleLogin() {
         return
       }
 
+      // 处理密码登录
       let username = ''
       if (loginMode.value === 'username-pwd') username = form.value.username
       else if (loginMode.value === 'account-pwd') username = form.value.account
       else if (loginMode.value === 'phone-pwd') username = form.value.phone
 
       const res = await login({ username, password: form.value.password })
-      authStore.setToken(res.token)
+      // 🔴 关键修改：传递 rememberMe.value
+      authStore.setToken(res.token, rememberMe.value)
       authStore.setUserInfo({
         userId: String(res.userId),
         username: res.username,
         phone: form.value.phone,
         role: (res.roles && res.roles[0]) ? res.roles[0].replace(/^ROLE_/, '').toLowerCase() : 'resident',
-        staffType: res.staffType
+        staffType: res.staffType,
+        bookingServiceType: res.bookingServiceType,
+        avatar: res.avatar
       })
       ElMessage.success('登录成功，欢迎回来！')
+      
+      // 保存登录凭证（记住账号功能）
+      if (rememberMe.value) {
+        saveCredentials()
+      }
+      
       const role = authStore.userInfo?.role
       if (role === 'staff') {
         router.push('/staff/workbench')
@@ -438,6 +456,43 @@ async function handleLogin() {
     }
   })
 }
+
+// 新增：保存登录凭证（记住账号功能）
+function saveCredentials() {
+  const cred = {
+    mode: loginMode.value,
+    account: form.value.account || form.value.username || form.value.phone,
+    phone: form.value.phone,
+    lastLogin: Date.now()
+  }
+  localStorage.setItem('savedCredentials', JSON.stringify(cred))
+}
+
+// 新增：恢复上次登录的账号（在组件挂载时调用）
+function restoreLastAccount() {
+  const saved = localStorage.getItem('savedCredentials')
+  if (saved) {
+    try {
+      const cred = JSON.parse(saved)
+      // 如果保存时间在30天内，自动填充
+      if (Date.now() - cred.lastLogin < 30 * 24 * 60 * 60 * 1000) {
+        loginMode.value = cred.mode
+        if (cred.mode === 'account-pwd') {
+          form.value.account = cred.account
+        } else if (cred.mode === 'username-pwd') {
+          form.value.username = cred.account
+        } else if (cred.mode.includes('phone')) {
+          form.value.phone = cred.phone || cred.account
+        }
+        rememberMe.value = true
+      }
+    } catch (e) {
+      console.error('Failed to restore credentials', e)
+    }
+  }
+}
+
+
 
 // ===== 忘记密码 =====
 const forgotVisible = ref(false)
@@ -531,6 +586,11 @@ function handleForgot() {
   forgotMockCode.value = ''
   forgotVisible.value = true
 }
+
+// 在 onMounted 中调用恢复功能
+onMounted(() => {
+  restoreLastAccount()
+})
 </script>
 
 <style scoped>
@@ -573,11 +633,13 @@ function handleForgot() {
   background: transparent;
   color: var(--text-muted);
   border-radius: calc(var(--radius-sm) - 0.125rem);
-  padding: 0.55rem 0.35rem;
+  padding: 0.55rem 0.25rem;
   cursor: pointer;
   line-height: 1.4;
   min-width: 0;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .tab-btn.active {
@@ -666,15 +728,21 @@ function handleForgot() {
   margin-top: 1rem;
 }
 
+.notice span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Code input row and button */
 .code-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.625rem;
   width: 100%;
 }
 
 .code-btn {
-  flex-shrink: 0;
+  flex: 0 1 9rem;
   min-width: 6.25rem;
 }
 
@@ -769,7 +837,9 @@ function handleForgot() {
   font-size: 0.6875rem;
   color: var(--text-muted);
   margin-top: 0.375rem;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
 }
 .node-line {
   position: absolute;

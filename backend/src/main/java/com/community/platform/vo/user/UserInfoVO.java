@@ -35,4 +35,6 @@ public class UserInfoVO {
     private String avatar;
 
     private String staffType;
+
+    private String bookingServiceType;
 }

@@ -51,6 +51,7 @@ export interface StaffCreateRequest {
   email?: string
   communityId?: number
   staffType: 'application' | 'booking'
+  bookingServiceType?: 'dining' | 'accompany' | 'home_visit'
 }
 
 export const createStaff = (data: StaffCreateRequest) =>

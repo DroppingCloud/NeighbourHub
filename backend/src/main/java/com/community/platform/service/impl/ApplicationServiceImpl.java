@@ -41,6 +41,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,10 +97,16 @@ public class ApplicationServiceImpl implements ApplicationService {
         // 自动分配工作人员
         workOrderService.assign(order.getOrderId());
 
-        noticeService.sendNotice(
-                ownerUserId,
+        notifyApplicationParticipants(
+                application,
                 "申请已提交",
                 "您的“" + item.getItemName() + "”申请已提交，等待工作人员审核。",
+                "system",
+                "application",
+                application.getApplicationId());
+        notifyAdmins(
+                "新的事项申请",
+                "居民提交了“" + item.getItemName() + "”申请，请在后台关注办理进度。",
                 "system",
                 "application",
                 application.getApplicationId());
@@ -172,13 +179,14 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         restoreWorkOrder(applicationId);
 
-        noticeService.sendNotice(
-                application.getUserId(),
+        notifyApplicationParticipants(
+                application,
                 "cancelled".equals(previousStatus) ? "申请已重新提交" : "补件已重新提交",
                 "您的申请已重新提交，等待工作人员审核。",
                 "system",
                 "application",
                 applicationId);
+        notifyAssignedStaff(applicationId, "申请已重新提交", "居民已重新提交申请材料，请及时处理。");
     }
 
     @Override
@@ -204,13 +212,15 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .set(WorkOrder::getAuditOpinion, "用户已撤回申请")
                 .set(WorkOrder::getFinishTime, null));
 
-        noticeService.sendNotice(
-                application.getUserId(),
+        notifyApplicationParticipants(
+                application,
                 "申请已撤回",
                 "您的申请已撤回，可在我的申请中修改材料后重新提交。",
                 "system",
                 "application",
                 applicationId);
+        notifyAssignedStaff(applicationId, "申请已撤回", "居民撤回了一条已分配给您的申请。");
+        notifyAdmins("申请已撤回", "居民撤回了一条事项申请。", "system", "application", applicationId);
     }
 
     @Override
@@ -392,6 +402,47 @@ public class ApplicationServiceImpl implements ApplicationService {
             row.put("sortOrder", template.getSortOrder());
             return row;
         }).toList();
+    }
+
+    private void notifyApplicationParticipants(ApplicationForm application,
+                                               String title,
+                                               String content,
+                                               String type,
+                                               String refType,
+                                               Long refId) {
+        Set<Long> recipients = new HashSet<>();
+        if (application.getUserId() != null) {
+            recipients.add(application.getUserId());
+        }
+        if (application.getProxyUserId() != null) {
+            recipients.add(application.getProxyUserId());
+        }
+        recipients.forEach(userId -> noticeService.sendNotice(userId, title, content, type, refType, refId));
+    }
+
+    private void notifyAssignedStaff(Long applicationId, String title, String content) {
+        WorkOrder order = workOrderMapper.selectOne(new LambdaQueryWrapper<WorkOrder>()
+                .eq(WorkOrder::getApplicationId, applicationId)
+                .last("LIMIT 1"));
+        if (order != null && order.getStaffUserId() != null) {
+            noticeService.sendNotice(order.getStaffUserId(), title, content, "system", "work_order", order.getOrderId());
+        }
+    }
+
+    private void notifyAdmins(String title, String content, String type, String refType, Long refId) {
+        adminRecipientIds().forEach(userId -> noticeService.sendNotice(userId, title, content, type, refType, refId));
+    }
+
+    private Set<Long> adminRecipientIds() {
+        Set<Long> recipients = new HashSet<>();
+        recipients.add(0L);
+        userMapper.selectList(new LambdaQueryWrapper<User>()
+                        .eq(User::getRole, "admin")
+                        .eq(User::getStatus, "active"))
+                .stream()
+                .map(User::getUserId)
+                .forEach(recipients::add);
+        return recipients;
     }
 
     private String toJson(Object data) {

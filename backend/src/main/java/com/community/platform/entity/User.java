@@ -48,6 +48,9 @@ public class User {
     /** Staff business type: application or booking. */
     private String staffType;
 
+    /** Booking service type for booking staff: dining/accompany/home_visit. */
+    private String bookingServiceType;
+
     /** System generated login account, such as SQ0001. */
     private String account;
 

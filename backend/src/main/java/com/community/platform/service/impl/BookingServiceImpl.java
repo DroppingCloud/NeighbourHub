@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Set;
 
 @Service
@@ -71,8 +72,11 @@ public class BookingServiceImpl implements BookingService {
         booking.setCommunityId(resolveCommunityId(ownerUserId, targetProfileId));
         serviceBookingMapper.insert(booking);
 
-        noticeService.sendNotice(ownerUserId, "预约已提交",
+        notifyBookingParticipants(booking, "预约已提交",
                 "您的社区服务预约已提交，等待工作人员接取。",
+                "booking", "booking", booking.getBookingId());
+        notifyCandidateBookingStaff(booking, "新的服务预约", "有新的" + serviceTypeLabel(booking.getServiceType()) + "待接取，请及时处理。");
+        notifyAdmins("新的服务预约", "居民提交了" + serviceTypeLabel(booking.getServiceType()) + "预约，请关注调度情况。",
                 "booking", "booking", booking.getBookingId());
         return booking.getBookingId();
     }
@@ -118,6 +122,11 @@ public class BookingServiceImpl implements BookingService {
         }
         booking.setStatus("cancelled");
         serviceBookingMapper.updateById(booking);
+        notifyBookingParticipants(booking, "预约已取消", "您的社区服务预约已取消。", "booking", "booking", bookingId);
+        if (booking.getStaffUserId() != null) {
+            noticeService.sendNotice(booking.getStaffUserId(), "预约已取消", "您负责的一条服务预约已被取消。", "booking", "booking", bookingId);
+        }
+        notifyAdmins("预约已取消", "一条社区服务预约已取消。", "booking", "booking", bookingId);
     }
 
     @Override
@@ -146,6 +155,7 @@ public class BookingServiceImpl implements BookingService {
                 && !staff.getCommunityId().equals(booking.getCommunityId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "只能接取本社区的预约");
         }
+        validateStaffServiceType(staff, booking);
         if (!"pending".equals(booking.getStatus())) {
             throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "只有待调度的预约可以接取");
         }
@@ -160,9 +170,13 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "该预约已被其他工作人员接取");
         }
 
-        noticeService.sendNotice(booking.getUserId(), "预约已被接取",
+        notifyBookingParticipants(booking, "预约已被接取",
                 "您的预约已被工作人员接取，工作人员将按时上门服务。",
                 "booking", "booking", bookingId);
+        noticeService.sendNotice(staffUserId, "预约接取成功",
+                "您已成功接取一条" + serviceTypeLabel(booking.getServiceType()) + "预约，请按预约时间服务。",
+                "booking", "booking", bookingId);
+        notifyAdmins("预约已被接取", "一条社区服务预约已由工作人员接取。", "booking", "booking", bookingId);
     }
 
     @Override
@@ -177,6 +191,7 @@ public class BookingServiceImpl implements BookingService {
         if (!staffUserId.equals(booking.getStaffUserId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "只能完成自己负责的预约");
         }
+        validateStaffServiceType(operator, booking);
         if (!"in_progress".equals(booking.getStatus())) {
             throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "只有进行中的预约才能完成");
         }
@@ -190,9 +205,11 @@ public class BookingServiceImpl implements BookingService {
         booking.setCompleteTime(now);
         serviceBookingMapper.updateById(booking);
 
-        noticeService.sendNotice(booking.getUserId(), "服务已完成",
+        notifyBookingParticipants(booking, "服务已完成",
                 "您的预约服务已完成。" + (StringUtils.hasText(feedback) ? "评价：" + feedback : ""),
                 "booking", "booking", bookingId);
+        noticeService.sendNotice(staffUserId, "服务已完成", "您已完成一条服务预约。", "booking", "booking", bookingId);
+        notifyAdmins("服务已完成", "一条社区服务预约已完成。", "booking", "booking", bookingId);
     }
 
     @Override
@@ -221,8 +238,12 @@ public class BookingServiceImpl implements BookingService {
         if (!admin && !isBookingStaff(staffUserId, staff)) {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权查看预约列表");
         }
+        if (!admin && !StringUtils.hasText(staff.getBookingServiceType())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "服务预约工作人员未配置服务类型");
+        }
         Long queryStaffId = admin && targetStaffUserId != null ? targetStaffUserId : staffUserId;
         Long staffCommunityId = staff == null ? null : staff.getCommunityId();
+        String staffBookingServiceType = !admin && staff != null ? staff.getBookingServiceType() : null;
 
         LambdaQueryWrapper<ServiceBooking> wrapper = new LambdaQueryWrapper<ServiceBooking>()
                 .orderByDesc(ServiceBooking::getCreateTime);
@@ -235,6 +256,9 @@ public class BookingServiceImpl implements BookingService {
                     wrapper.and(w -> w.eq(ServiceBooking::getCommunityId, staffCommunityId)
                             .or()
                             .isNull(ServiceBooking::getCommunityId));
+                }
+                if (StringUtils.hasText(staffBookingServiceType)) {
+                    wrapper.eq(ServiceBooking::getServiceType, staffBookingServiceType);
                 }
             } else {
                 wrapper.eq(ServiceBooking::getStatus, status)
@@ -252,9 +276,15 @@ public class BookingServiceImpl implements BookingService {
                                         .or()
                                         .isNull(ServiceBooking::getCommunityId));
                             }
+                            if (StringUtils.hasText(staffBookingServiceType)) {
+                                open.eq(ServiceBooking::getServiceType, staffBookingServiceType);
+                            }
                         })
                         .or(e -> e.eq(ServiceBooking::getStaffUserId, queryStaffId)));
             }
+        }
+        if (StringUtils.hasText(staffBookingServiceType)) {
+            wrapper.eq(ServiceBooking::getServiceType, staffBookingServiceType);
         }
 
         Page<ServiceBooking> page = serviceBookingMapper.selectPage(new Page<>(page(pageNum), size(pageSize)), wrapper);
@@ -270,6 +300,8 @@ public class BookingServiceImpl implements BookingService {
         if (!staffUserId.equals(booking.getStaffUserId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "只有负责该预约的工作人员才能开始服务");
         }
+        User staff = userMapper.selectById(staffUserId);
+        validateStaffServiceType(staff, booking);
         if (!"confirmed".equals(booking.getStatus())) {
             throw new BusinessException(ResultCode.BOOKING_STATUS_ERROR, "只有已确认的预约才能开始服务");
         }
@@ -278,9 +310,10 @@ public class BookingServiceImpl implements BookingService {
         }
         booking.setStatus("in_progress");
         serviceBookingMapper.updateById(booking);
-        noticeService.sendNotice(booking.getUserId(), "服务开始",
+        notifyBookingParticipants(booking, "服务开始",
                 "您的预约服务已开始。",
                 "booking", "booking", bookingId);
+        notifyAdmins("服务开始", "一条社区服务预约已开始服务。", "booking", "booking", bookingId);
     }
 
     private ServiceBooking requireBooking(Long bookingId) {
@@ -303,6 +336,18 @@ public class BookingServiceImpl implements BookingService {
         return hasStaffRole && user != null && "booking".equals(user.getStaffType());
     }
 
+    private void validateStaffServiceType(User staff, ServiceBooking booking) {
+        if (staff == null || !"staff".equals(staff.getRole()) || !"booking".equals(staff.getStaffType())) {
+            return;
+        }
+        if (!StringUtils.hasText(staff.getBookingServiceType())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "服务预约工作人员未配置服务类型");
+        }
+        if (!staff.getBookingServiceType().equals(booking.getServiceType())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "只能处理自己服务类型的预约");
+        }
+    }
+
     private boolean isAdmin(Long userId) {
         if (userId != null && userId == 0L) {
             return true;
@@ -316,6 +361,49 @@ public class BookingServiceImpl implements BookingService {
                 .stream()
                 .map(UserRole::getRoleCode)
                 .anyMatch("ROLE_ADMIN"::equals);
+    }
+
+    private void notifyBookingParticipants(ServiceBooking booking,
+                                           String title,
+                                           String content,
+                                           String type,
+                                           String refType,
+                                           Long refId) {
+        Set<Long> recipients = new HashSet<>();
+        if (booking.getUserId() != null) {
+            recipients.add(booking.getUserId());
+        }
+        if (booking.getProxyUserId() != null) {
+            recipients.add(booking.getProxyUserId());
+        }
+        recipients.forEach(userId -> noticeService.sendNotice(userId, title, content, type, refType, refId));
+    }
+
+    private void notifyCandidateBookingStaff(ServiceBooking booking, String title, String content) {
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
+                .eq(User::getRole, "staff")
+                .eq(User::getStatus, "active")
+                .eq(User::getStaffType, "booking")
+                .eq(User::getBookingServiceType, booking.getServiceType());
+        if (booking.getCommunityId() != null) {
+            wrapper.and(w -> w.eq(User::getCommunityId, booking.getCommunityId())
+                    .or()
+                    .isNull(User::getCommunityId));
+        }
+        userMapper.selectList(wrapper)
+                .forEach(staff -> noticeService.sendNotice(staff.getUserId(), title, content, "booking", "booking", booking.getBookingId()));
+    }
+
+    private void notifyAdmins(String title, String content, String type, String refType, Long refId) {
+        Set<Long> recipients = new HashSet<>();
+        recipients.add(0L);
+        userMapper.selectList(new LambdaQueryWrapper<User>()
+                        .eq(User::getRole, "admin")
+                        .eq(User::getStatus, "active"))
+                .stream()
+                .map(User::getUserId)
+                .forEach(recipients::add);
+        recipients.forEach(userId -> noticeService.sendNotice(userId, title, content, type, refType, refId));
     }
 
     private Long resolveCommunityId(Long userId, Long profileId) {

@@ -75,7 +75,10 @@
             <!-- 智能操作按钮 -->
             <div v-if="msg.showActions && !msg.isWelcome" class="message-actions">
               <div class="msg-type-badge">
-                <el-tag size="small" type="warning">{{ msg.actionType === 'booking' ? '服务预约' : '事项办理' }}</el-tag>
+                <el-tag size="small" type="warning">
+                  {{ msg.actionType === 'booking' ? '服务预约' : '事项办理' }}
+                  <span v-if="msg.pendingItem"> · {{ msg.pendingItem }}</span>
+                </el-tag>
               </div>
               <el-button
                 v-if="msg.actionType === 'booking'"
@@ -84,7 +87,7 @@
                 @click="goToBooking(msg.pendingItem)"
                 class="action-primary-btn"
               >
-                📅 立即预约
+                立即预约{{ msg.pendingItem ? `：${msg.pendingItem}` : '' }}
               </el-button>
               <el-button
                 v-else
@@ -93,7 +96,7 @@
                 @click="handleStartProcess(msg.pendingItem)"
                 class="action-primary-btn"
               >
-                🚀 开始办理
+                开始办理{{ msg.pendingItem ? `：${msg.pendingItem}` : '' }}
               </el-button>
             </div>
           </div>
@@ -165,20 +168,16 @@ const router = useRouter()
 
 const GUIDE_CHAT_STORAGE_KEY_PREFIX = 'neighbourhub_ai_guide_chat_state'
 
-const APPLICATION_ACTION_ITEMS = ['居住证办理', '老年补贴申请', '老年补贴', '居住证明开具', '居住证明', '低保申请', '低保']
-// Only these items are allowed to surface a "开始办理" action button and route to the application flow.
-const ALLOWED_ACTION_ITEMS = new Set([
-  '居住证办理',
-  '老年补贴申请',
-  '老年补贴',
-  '居住证明开具',
-  '居住证明',
-  '便民证明'
-])
+const APPLICATION_ACTION_ITEMS = [
+  { name: '居住证明开具', aliases: ['居住证明开具', '居住证明', '开居住证明'] },
+  { name: '居住证办理', aliases: ['居住证办理', '办居住证', '办理居住证', '居住证'] },
+  { name: '老年补贴申请', aliases: ['老年补贴申请', '老年补贴', '高龄津贴', '高龄补贴'] },
+  { name: '便民证明', aliases: ['便民证明', '便民证明开具', '无犯罪记录证明', '低收入证明', '困难证明', '同一人身份证明'] }
+]
 const BOOKING_ACTION_ITEMS = [
-  { keywords: ['助餐服务', '助餐'], type: 'dining' },
-  { keywords: ['陪诊服务', '陪诊'], type: 'accompany' },
-  { keywords: ['上门服务', '上门'], type: 'home_visit' }
+  { name: '助餐服务', keywords: ['助餐服务', '助餐', '送餐', '配餐'], type: 'dining' },
+  { name: '陪诊服务', keywords: ['陪诊服务', '陪诊', '陪同就医', '取药'], type: 'accompany' },
+  { name: '上门服务', keywords: ['上门服务', '上门', '家政清洁', '维修探访', '维修', '探访'], type: 'home_visit' }
 ]
 
 interface ChatMessage {
@@ -624,73 +623,54 @@ async function appendStreamingText(messageIndex: number, text: string) {
 }
 
 function analyzeMessage(content: string): { showActions: boolean; actionType: 'booking' | 'application'; itemName: string | null } {
-  const applicationMatches = APPLICATION_ACTION_ITEMS.filter(item => content.includes(item))
-  const bookingMatches = BOOKING_ACTION_ITEMS.filter(item =>
-    item.keywords.some(keyword => content.includes(keyword))
-  )
-  const applicationItem = applicationMatches[0]
-  const bookingItem = bookingMatches[0]
+  if (content.includes('您好！我是AI导办助手')) {
+    return { showActions: false, actionType: 'application', itemName: null }
+  }
+
+  const applicationMatches = resolveApplicationItems(content)
+  const bookingMatches = resolveBookingItems(content)
+  const applicationItem = applicationMatches.length === 1 ? applicationMatches[0] : null
+  const bookingItem = bookingMatches.length === 1 ? bookingMatches[0] : null
   const applicationCopyCount = countActionCopy(content, ['开始办理', '办理', '申请', '提交申请', '在线填写'])
   const bookingCopyCount = countActionCopy(content, ['立即预约', '预约', '服务预约'])
-  const hasApplicationTopic = Boolean(applicationItem)
-  const hasBookingTopic = Boolean(bookingItem) && !hasApplicationTopic
 
-  const actionType: 'booking' | 'application' = hasBookingTopic && bookingCopyCount >= applicationCopyCount ? 'booking' : 'application'
-  let showActions = actionType === 'booking'
-    ? hasBookingTopic && bookingCopyCount > 0
-    : hasApplicationTopic && applicationCopyCount > 0
-  
-  let itemName: string | null = null
-  const itemPatterns = [
-    /「([^」]+)」/,
-    /《([^》]+)》/,
-    /【([^】]+)】/,
-    /老年补贴申请/,
-    /老年补贴/,
-    /居住证/,
-    /居住证办理/,
-    /居住证明开具/,
-    /居住证明/,
-    /低保/,
-    /高龄津贴/,
-    /家属代办/
-  ]
-  
-  for (const pattern of itemPatterns) {
-    if (pattern instanceof RegExp) {
-      const match = content.match(pattern)
-      if (match) {
-        itemName = match[1] || match[0]
-        break
-      }
-    } else if (content.includes(pattern as string)) {
-      itemName = pattern as string
-      break
+  if (applicationMatches.length + bookingMatches.length !== 1) {
+    return { showActions: false, actionType: 'application', itemName: null }
+  }
+
+  if (bookingItem && (!applicationItem || bookingCopyCount > applicationCopyCount)) {
+    return {
+      showActions: true,
+      actionType: 'booking',
+      itemName: bookingItem.name
     }
   }
-  
-  // Resolve the canonical item name candidate and its source
-  const resolvedItem = applicationItem || bookingItem?.keywords[0] || itemName
-  const resolvedSource: 'application' | 'booking' | 'unknown' = applicationItem ? 'application' : (bookingItem ? 'booking' : 'unknown')
 
-  // Only allow the action button for applications when explicitly whitelisted.
-  // Booking actions are allowed when a bookingItem was detected (we support the three booking services).
-  if (resolvedSource === 'application') {
-    if (!resolvedItem || !ALLOWED_ACTION_ITEMS.has(resolvedItem)) {
-      showActions = false
+  if (applicationItem) {
+    return {
+      showActions: true,
+      actionType: 'application',
+      itemName: applicationItem.name
     }
-  } else if (resolvedSource === 'booking') {
-    // allow booking actions (bookingItem exists)
-    showActions = showActions && Boolean(bookingItem)
-  } else {
-    showActions = false
   }
 
-  return {
-    showActions: showActions && !content.includes('您好！我是AI导办助手'),
-    actionType,
-    itemName: resolvedItem
-  }
+  return { showActions: false, actionType: 'application', itemName: null }
+}
+
+function resolveApplicationItem(content: string) {
+  return resolveApplicationItems(content)[0] || null
+}
+
+function resolveApplicationItems(content: string) {
+  return APPLICATION_ACTION_ITEMS.filter(item => item.aliases.some(alias => content.includes(alias)))
+}
+
+function resolveBookingItem(content: string) {
+  return resolveBookingItems(content)[0] || null
+}
+
+function resolveBookingItems(content: string) {
+  return BOOKING_ACTION_ITEMS.filter(item => item.keywords.some(keyword => content.includes(keyword)))
 }
 
 function countActionCopy(content: string, words: string[]): number {
@@ -806,7 +786,10 @@ async function sendMessage(text?: string) {
     // 流结束，清除 streaming index（隐藏独立打字指示器）
     currentStreamingIndex.value = null
 
-    let aiContent = messages.value[assistantIndex].content || '抱歉，我暂时无法回答这个问题。请稍后再试或拨打12345咨询。'
+    let aiContent = messages.value[assistantIndex].content
+    if (!aiContent || !aiContent.trim()) {
+      aiContent = '我可以回答平台使用、办理流程、材料准备、进度查询、家属代办和消息通知等问题。请再描述一下您想咨询的内容；如果是具体业务，也可以直接说“居住证办理”“居住证明开具”“老年补贴申请”“便民证明”或“助餐/陪诊/上门服务”。'
+    }
 
     // 后处理：在数字或中文序号前补换行，避免列表项连在一行
     try {
@@ -848,7 +831,11 @@ async function sendMessage(text?: string) {
 
 function handleStartProcess(itemName?: string) {
   const targetItem = itemName || pendingItemName.value
-  if (targetItem) {
+  const applicationItem = targetItem ? resolveApplicationItem(targetItem) : null
+  if (applicationItem) {
+    router.push({ path: '/application/submit', query: { itemName: applicationItem.name } })
+    ElMessage.success(`正在为您办理「${applicationItem.name}」`)
+  } else if (targetItem) {
     router.push({ path: '/application/submit', query: { itemName: targetItem } })
     ElMessage.success(`正在为您办理「${targetItem}」`)
   } else {
@@ -859,9 +846,9 @@ function handleStartProcess(itemName?: string) {
 
 function goToBooking(itemName?: string) {
   const targetItem = itemName || pendingItemName.value || ''
-  const bookingItem = BOOKING_ACTION_ITEMS.find(item => item.keywords.some(keyword => targetItem.includes(keyword)))
+  const bookingItem = resolveBookingItem(targetItem)
   router.push({ path: '/booking', query: bookingItem ? { serviceType: bookingItem.type } : {} })
-  ElMessage.success('即将跳转到服务预约页面')
+  ElMessage.success(bookingItem ? `即将预约「${bookingItem.name}」` : '即将跳转到服务预约页面')
 }
 
 // 新增清空历史记录函数

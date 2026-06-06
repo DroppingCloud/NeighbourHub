@@ -13,6 +13,14 @@ export function useTheme() {
     }
     isDark.value = dark
     localStorage.setItem('theme', dark ? 'dark' : 'light')
+    const rawSettings = localStorage.getItem('app-settings')
+    let settings = {}
+    if (rawSettings) {
+      try {
+        settings = JSON.parse(rawSettings)
+      } catch {}
+    }
+    localStorage.setItem('app-settings', JSON.stringify({ ...settings, darkMode: dark }))
   }
 
   // 切换主题

@@ -120,6 +120,8 @@ public class AuthServiceImpl implements AuthService {
         vo.setUsername(user.getUsername());
         vo.setRoles(roles);
         vo.setStaffType(user.getStaffType());
+        vo.setBookingServiceType(user.getBookingServiceType());
+        vo.setAvatar(user.getAvatar());
         return vo;
     }
 
@@ -142,6 +144,8 @@ public class AuthServiceImpl implements AuthService {
         vo.setUsername(user.getUsername());
         vo.setRoles(roles);
         vo.setStaffType(user.getStaffType());
+        vo.setBookingServiceType(user.getBookingServiceType());
+        vo.setAvatar(user.getAvatar());
         return vo;
     }
 
@@ -244,6 +248,7 @@ public class AuthServiceImpl implements AuthService {
         vo.setEmail(user.getEmail());
         vo.setRoles(roles);
         vo.setStaffType(user.getStaffType());
+        vo.setBookingServiceType(user.getBookingServiceType());
         if (profile != null) {
             vo.setRealName(profile.getRealName());
             vo.setIdCard(profile.getIdCard());

@@ -46,7 +46,12 @@
     <div class="hot-services">
       <h3 class="section-title">热门事项</h3>
       <div class="service-list" v-loading="loadingServices">
-        <div v-for="service in hotServices" :key="service.itemId" class="service-item" @click="applyService">
+        <div
+          v-for="service in hotServices"
+          :key="service.itemId"
+          class="service-item"
+          @click="applyService(service)"
+        >
           <div class="service-info">
             <span class="service-name">{{ service.itemName }}</span>
             <span class="service-category">{{ service.category }}</span>
@@ -98,12 +103,62 @@ const services = ref<ServiceItemVO[]>([])
 const loadingApplications = ref(false)
 const loadingServices = ref(false)
 
+type HotService = ServiceItemVO & { itemId: number; itemName: string; category: string }
+
+const defaultHotServices: HotService[] = [
+  {
+    itemId: 1,
+    itemName: '居住证办理',
+    itemCode: 'ITEM_001',
+    category: '证件',
+    description: '为非本地户籍居民办理居住证。',
+    conditions: '',
+    status: 'online',
+    createTime: ''
+  },
+  {
+    itemId: 2,
+    itemName: '老年补贴申请',
+    itemCode: 'ITEM_002',
+    category: '补贴',
+    description: '为符合条件的老年居民申请高龄津贴。',
+    conditions: '',
+    status: 'online',
+    createTime: ''
+  },
+  {
+    itemId: 3,
+    itemName: '居住证明开具',
+    itemCode: 'ITEM_003',
+    category: '证明',
+    description: '开具在本辖区居住的证明材料。',
+    conditions: '',
+    status: 'online',
+    createTime: ''
+  },
+  {
+    itemId: 4,
+    itemName: '便民证明',
+    itemCode: 'ITEM_004',
+    category: '证明',
+    description: '开具常见社区便民证明材料。',
+    conditions: '',
+    status: 'online',
+    createTime: ''
+  }
+]
+
 const stats = computed(() => ({
   applications: applications.value.filter(a => !['completed', 'rejected'].includes(a.status)).length,
   bookings: bookings.value.filter(b => !['completed', 'cancelled'].includes(b.status)).length
 }))
 
-const hotServices = computed(() => services.value.slice(0, 4))
+const hotServices = computed(() =>
+  defaultHotServices.map(item => {
+    const matched = services.value.find(service => service.itemName === item.itemName)
+    return matched ? { ...item, ...matched } : item
+  })
+)
 const recentApplications = computed(() => applications.value.slice(0, 3))
 
 onMounted(() => {
@@ -120,7 +175,7 @@ async function loadHomeData() {
     const [appResult, bookingResult, serviceResult, countResult] = await Promise.allSettled([
       getApplicationList({ pageNum: 1, pageSize: 10 }),
       getBookingList(1, 10),
-      getPublicServiceItemList({ status: 'enabled', pageNum: 1, pageSize: 8 }),
+      getPublicServiceItemList({ status: 'online', pageNum: 1, pageSize: 8 }),
       getUnreadCount()
     ])
     applications.value = appResult.status === 'fulfilled' ? getPageRows<ApplicationVO>(appResult.value) : []
@@ -142,8 +197,14 @@ function goTo(path: string) {
   router.push(path)
 }
 
-function applyService() {
-  router.push('/application/submit')
+function applyService(service: HotService) {
+  router.push({
+    path: '/application/submit',
+    query: {
+      serviceId: String(service.itemId),
+      itemName: service.itemName
+    }
+  })
 }
 
 function getStatusType(status: string) {
@@ -290,10 +351,14 @@ function getStatusText(status: string) {
   cursor: pointer;
   color: var(--text-primary);
   gap: 0.75rem;
+  transition: all 0.25s ease;
 }
 
 .service-info {
   min-width: 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .service-item:last-child {
@@ -309,7 +374,8 @@ function getStatusText(status: string) {
 
 .service-name {
   font-weight: 500;
-  margin-right: 0.75rem;
+  margin-right: 0.25rem;
+  overflow-wrap: anywhere;
 }
 
 .service-category {

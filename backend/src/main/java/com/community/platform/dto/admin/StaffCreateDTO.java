@@ -23,4 +23,7 @@ public class StaffCreateDTO {
     /** application: 事项办理工作人员; booking: 服务预约工作人员 */
     @NotBlank(message = "工作人员类型不能为空")
     private String staffType;
+
+    /** dining/accompany/home_visit; required when staffType is booking. */
+    private String bookingServiceType;
 }

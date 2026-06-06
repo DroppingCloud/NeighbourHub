@@ -1,11 +1,24 @@
 <template>
   <div class="staff-workbench">
-    <div class="page-header">
-      <h2>工作台</h2>
-      <p>欢迎回来，{{ userInfo?.realName || userInfo?.username }}，今日待办事项如下</p>
+    <div class="welcome-banner">
+      <div class="banner-content">
+        <h2>欢迎回来，{{ userInfo?.realName || userInfo?.username }}</h2>
+        <p>{{ workbenchSubtitle }}</p>
+      </div>
+      <div class="banner-stats">
+        <div
+          v-for="item in workbenchStats"
+          :key="item.label"
+          class="stat-item"
+          @click="goTo(item.path, item.tab)"
+        >
+          <div class="stat-value">{{ item.value }}</div>
+          <div class="stat-label">{{ item.label }}</div>
+        </div>
+      </div>
     </div>
 
-    <div class="stats-row">
+    <!-- <div class="stats-row">
       <div v-if="isApplicationStaff" class="stat-card" @click="goTo('/workorder', 'pending')">
         <div class="stat-icon warning"><el-icon><Tickets /></el-icon></div>
         <div class="stat-info">
@@ -38,7 +51,7 @@
           <div class="stat-trend">进行中</div>
         </div>
       </div>
-    </div>
+    </div> -->
 
     <div class="quick-actions-section">
       <h3 class="section-title">快捷操作</h3>
@@ -50,16 +63,12 @@
         </div>
         <div v-if="isBookingStaff" class="action-card" @click="goTo('/staff/booking', 'pending')">
           <div class="action-icon info"><el-icon><Position /></el-icon></div>
-          <span>服务派单</span>
+          <span>待调度</span>
           <span class="action-badge" v-if="pendingDispatches > 0">{{ pendingDispatches }}</span>
         </div>
         <div class="action-card" @click="goTo('/notice')">
           <div class="action-icon"><el-icon><Bell /></el-icon></div>
           <span>查看通知</span>
-        </div>
-        <div class="action-card" @click="goTo('/admin')">
-          <div class="action-icon"><el-icon><Setting /></el-icon></div>
-          <span>后台管理</span>
         </div>
       </div>
     </div>
@@ -107,10 +116,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tickets, Loading, Calendar, Check, Position, Bell, Setting } from '@element-plus/icons-vue'
+import { Tickets, Loading, Calendar, Check, Position, Bell } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getWorkOrderList, auditWorkOrder, type WorkOrderVO } from '@/api/workOrder'
 import { assignBooking, type BookingVO, getStaffBookingList } from '@/api/booking'
+import { getUnreadCount } from '@/api/notice'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -122,13 +132,33 @@ const isBookingStaff = computed(() => staffType.value === 'booking')
 const workOrders = ref<WorkOrderVO[]>([])
 const bookings = ref<BookingVO[]>([])
 const loading = ref(false)
+const unreadCount = ref(0)
 
 const pendingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').length)
 const processingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'processing').length)
+const completedWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'completed').length)
 const pendingDispatches = computed(() => bookings.value.filter(b => b.status === 'pending').length)
 const processingServices = computed(() => bookings.value.filter(b => b.status === 'in_progress').length)
 const recentWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').slice(0, 5))
 const recentBookings = computed(() => bookings.value.filter(b => b.status === 'pending').slice(0, 5))
+const workbenchSubtitle = computed(() => {
+  if (isBookingStaff.value) return '社区服务预约工作台，请及时处理服务调度与进行中事项'
+  return '事项办理工单工作台，请及时处理居民提交的申请'
+})
+const workbenchStats = computed(() => {
+  if (isBookingStaff.value) {
+    return [
+      { label: '待调度', value: pendingDispatches.value, path: '/staff/booking', tab: 'pending' },
+      { label: '进行中', value: processingServices.value, path: '/staff/booking', tab: 'in_progress' },
+      { label: '未读消息', value: unreadCount.value, path: '/notice' }
+    ]
+  }
+  return [
+    { label: '待处理', value: pendingWorkOrders.value, path: '/workorder', tab: 'pending' },
+    { label: '已完成', value: completedWorkOrders.value, path: '/workorder', tab: 'completed' },
+    { label: '未读消息', value: unreadCount.value, path: '/notice' }
+  ]
+})
 
 onMounted(() => {
   loadWorkbench()
@@ -137,14 +167,27 @@ onMounted(() => {
 async function loadWorkbench() {
   loading.value = true
   try {
+    const unreadPromise = getUnreadCount().catch(() => 0)
     if (isApplicationStaff.value) {
-      const workOrderPage = await getWorkOrderList({ pageNum: 1, pageSize: 50 })
-      workOrders.value = getRows<WorkOrderVO>(workOrderPage)
+      const [workOrderPage, completedPage, count] = await Promise.all([
+        getWorkOrderList({ pageNum: 1, pageSize: 50 }),
+        getWorkOrderList({ status: 'completed', pageNum: 1, pageSize: 50 }),
+        unreadPromise
+      ])
+      workOrders.value = [
+        ...getRows<WorkOrderVO>(workOrderPage),
+        ...getRows<WorkOrderVO>(completedPage)
+      ]
       bookings.value = []
+      unreadCount.value = Number(count || 0)
     } else if (isBookingStaff.value) {
-      const bookingPage = await getStaffBookingList(1, 100)
+      const [bookingPage, count] = await Promise.all([
+        getStaffBookingList(1, 100),
+        unreadPromise
+      ])
       bookings.value = getRows<BookingVO>(bookingPage)
       workOrders.value = []
+      unreadCount.value = Number(count || 0)
     }
   } finally {
     loading.value = false
@@ -206,29 +249,66 @@ async function quickDispatch(booking: BookingVO) {
   margin: 0 auto;
 }
 
-.page-header {
+.welcome-banner {
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%);
+  border-radius: var(--radius-lg);
+  padding: 2rem 2.5rem;
   margin-bottom: 1.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #fff;
+  gap: 1.5rem;
+  flex-wrap: wrap;
 }
 
-.page-header h2 {
+.banner-content {
+  min-width: 0;
+}
+
+.banner-content h2 {
   font-family: var(--font-serif);
   font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
   margin-bottom: 0.375rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
-.page-header p {
-  font-size: 0.875rem;
-  color: var(--text-muted);
+.banner-content p {
+  color: rgba(255,255,255,0.7);
+  line-height: 1.5;
 }
 
-.stats-row {
+.banner-stats {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  text-align: center;
+  min-width: 4.5rem;
+  cursor: pointer;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+
+.stat-label {
+  font-size: 0.8125rem;
+  color: rgba(255,255,255,0.68);
+  margin-top: 0.25rem;
+}
+
+/* .stats-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
   gap: 1.25rem;
   margin-bottom: 1.75rem;
-}
+} */
 
 .stat-card {
   background: var(--card-bg);
@@ -285,14 +365,14 @@ async function quickDispatch(booking: BookingVO) {
   min-width: 0;
 }
 
-.stat-value {
+.stat-card .stat-value {
   font-size: 1.75rem;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.2;
 }
 
-.stat-label {
+.stat-card .stat-label {
   font-size: 0.8125rem;
   color: var(--text-muted);
   margin-top: 0.25rem;
@@ -405,9 +485,18 @@ async function quickDispatch(booking: BookingVO) {
 }
 
 @media (max-width: 48rem) {
-  .stats-row,
   .action-grid {
     grid-template-columns: 1fr;
+  }
+
+  .banner-stats {
+    width: 100%;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .welcome-banner {
+    padding: 1.5rem;
   }
 }
 </style>

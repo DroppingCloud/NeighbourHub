@@ -1,4 +1,5 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+﻿// src/router/index.ts
+import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -176,18 +177,30 @@ router.beforeEach((to, _from, next) => {
   document.title = `${String(to.meta.title || '社区服务平台')} - 社区服务协同平台`
 
   const authStore = useAuthStore()
+  
+  // 在路由守卫中尝试恢复 token和用户信息
+  if (!authStore.token) {
+    const hasToken = authStore.initAuth()
+    if (hasToken) {
+      authStore.restoreUserInfo()
+    }
+  }
+  
   const isLoggedIn = !!authStore.token
 
+  // 需要登录但未登录
   if (to.meta.requiresAuth !== false && !isLoggedIn) {
     next('/login')
     return
   }
 
+  // 已登录但访问登录/注册页
   if ((to.path === '/login' || to.path === '/register') && isLoggedIn) {
     next('/home')
     return
   }
 
+  // 角色权限检查
   if (to.meta.roles && isLoggedIn) {
     const allowedRoles = to.meta.roles as string[]
     const normalizedUserRole = normalizeRole(authStore.userInfo?.role)
@@ -199,6 +212,7 @@ router.beforeEach((to, _from, next) => {
     }
   }
 
+  // 工作人员类型特殊处理
   const normalizedUserRole = normalizeRole(authStore.userInfo?.role)
   const staffType = authStore.userInfo?.staffType || ''
   if (normalizedUserRole === 'ROLE_STAFF') {
@@ -216,4 +230,3 @@ router.beforeEach((to, _from, next) => {
 })
 
 export default router
-

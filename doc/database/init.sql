@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   `deleted`     TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除: 0正常 1已删除',
   `role`        VARCHAR(30)  DEFAULT NULL            COMMENT 'admin/staff/resident/family',
   `staff_type`  VARCHAR(30)  DEFAULT NULL            COMMENT 'application/booking; only for staff',
+  `booking_service_type` VARCHAR(50) DEFAULT NULL     COMMENT 'booking staff service type: dining/accompany/home_visit',
   `community_id` BIGINT      DEFAULT NULL            COMMENT '社区 ID',
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `uk_username` (`username`),
@@ -39,6 +40,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   UNIQUE KEY `uk_phone` (`phone`),
   KEY `idx_status` (`status`),
   KEY `idx_staff_type` (`staff_type`),
+  KEY `idx_booking_service_type` (`booking_service_type`),
   KEY `idx_user_community_id` (`community_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户账号表';
 
@@ -282,13 +284,13 @@ CREATE TABLE IF NOT EXISTS `notice` (
 -- ============================================================
 
 INSERT IGNORE INTO `user`
-  (`user_id`, `username`, `account`, `password`, `phone`, `status`, `role`, `staff_type`, `community_id`)
+  (`user_id`, `username`, `account`, `password`, `phone`, `status`, `role`, `staff_type`, `booking_service_type`, `community_id`)
 VALUES
-  (1, 'admin',      'SQ0001', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', NULL, 1),
-  (2, 'staff01',    'SQ0002', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 'application', 1),
-  (5, 'booking01',  'SQ0005', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13844444444', 'active', 'staff', 'booking', 1),
-  (3, 'resident01', 'SQ0003', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', NULL, 1),
-  (4, 'family01',   'SQ0004', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', NULL, 1);
+  (1, 'admin',      'SQ0001', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', NULL, NULL, 1),
+  (2, 'staff01',    'SQ0002', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 'application', NULL, 1),
+  (5, 'booking01',  'SQ0005', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13844444444', 'active', 'staff', 'booking', 'dining', 1),
+  (3, 'resident01', 'SQ0003', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', NULL, NULL, 1),
+  (4, 'family01',   'SQ0004', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', NULL, NULL, 1);
 
 INSERT IGNORE INTO `user_role` (`user_id`, `role_code`) VALUES
   (1, 'ROLE_ADMIN'),

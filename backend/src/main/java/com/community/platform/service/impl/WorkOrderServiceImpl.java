@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -217,10 +218,16 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             }
             application.setStatus(toStatus);
             applicationFormMapper.updateById(application);
-            noticeService.sendNotice(
-                    application.getUserId(),
+            notifyApplicationParticipants(
+                    application,
                     noticeTitle(toStatus),
                     noticeContent(toStatus, auditOpinion),
+                    "audit_result",
+                    "application",
+                    application.getApplicationId());
+            notifyAdmins(
+                    noticeTitle(toStatus),
+                    "工作人员已处理事项申请，处理结果：" + statusLabel(toStatus) + "。",
                     "audit_result",
                     "application",
                     application.getApplicationId());
@@ -235,6 +242,14 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         log.setToStatus(toStatus);
         log.setRemark(auditOpinion);
         workOrderLogMapper.insert(log);
+
+        noticeService.sendNotice(
+                assignee.getUserId(),
+                "新的工单已分配",
+                "系统已将一条事项办理工单分配给您，请及时处理。工单号：" + orderId,
+                "system",
+                "work_order",
+                orderId);
     }
 
     @Override
@@ -455,6 +470,34 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .eq(User::getRole, "admin")
                 .last("LIMIT 1"));
         return admin == null ? null : admin.getUserId();
+    }
+
+    private void notifyApplicationParticipants(ApplicationForm application,
+                                               String title,
+                                               String content,
+                                               String type,
+                                               String refType,
+                                               Long refId) {
+        Set<Long> recipients = new HashSet<>();
+        if (application.getUserId() != null) {
+            recipients.add(application.getUserId());
+        }
+        if (application.getProxyUserId() != null) {
+            recipients.add(application.getProxyUserId());
+        }
+        recipients.forEach(userId -> noticeService.sendNotice(userId, title, content, type, refType, refId));
+    }
+
+    private void notifyAdmins(String title, String content, String type, String refType, Long refId) {
+        Set<Long> recipients = new HashSet<>();
+        recipients.add(0L);
+        userMapper.selectList(new LambdaQueryWrapper<User>()
+                        .eq(User::getRole, "admin")
+                        .eq(User::getStatus, "active"))
+                .stream()
+                .map(User::getUserId)
+                .forEach(recipients::add);
+        recipients.forEach(userId -> noticeService.sendNotice(userId, title, content, type, refType, refId));
     }
 
     private WorkOrderVO toWorkOrderVO(WorkOrder order) {

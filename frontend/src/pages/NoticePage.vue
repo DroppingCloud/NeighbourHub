@@ -1,4 +1,6 @@
-﻿<template>
+﻿<!-- frontend/src/pages/NoticePage.vue -->
+
+<template>
   <div class="notifications-container">
     <div class="page-header">
       <h2>消息通知</h2>
@@ -11,8 +13,9 @@
       <div
         v-for="item in notifications"
         :key="item.id"
+        :id="`notice-${item.id}`"
         class="notification-item"
-        :class="{ unread: !item.isRead }"
+        :class="{ unread: !item.isRead, highlighted: highlightedId === item.id }"
         @click="handleClick(item)"
       >
         <div class="notification-icon" :class="item.type">
@@ -21,6 +24,7 @@
             <Warning v-if="item.type === 'supplement'" />
             <CircleCheck v-if="item.type === 'audit'" />
             <Service v-if="item.type === 'service'" />
+            <StarFilled v-if="item.type === 'evaluation'" />
           </el-icon>
         </div>
         <div class="notification-content">
@@ -37,33 +41,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { Bell, Warning, CircleCheck, Service } from '@element-plus/icons-vue'
+import { computed, nextTick, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Bell, Warning, CircleCheck, Service, StarFilled } from '@element-plus/icons-vue'
 import { useNotificationStore } from '@/stores/notification'
+import { openNoticeTarget } from '@/utils/noticeNavigation'
 
 const router = useRouter()
+const route = useRoute()
 const notificationStore = useNotificationStore()
 const notifications = computed(() => notificationStore.notifications)
 const unreadCount = computed(() => notificationStore.unreadCount)
+const highlightedId = computed(() => String(route.query.highlightId || ''))
 
 async function handleClick(item: any) {
   await notificationStore.markAsRead(item.id)
-  
-  // 根据消息类型跳转到对应页面，并携带高亮ID
-  if (item.relatedType === 'application') {
-    router.push({
-      path: '/application/list',
-      query: { highlightId: item.relatedId }
-    })
-  } else if (item.relatedType === 'booking') {
-    router.push({
-      path: '/booking/list',
-      query: { highlightId: item.relatedId }
-    })
-  } else {
-    router.push('/notice')
-  }
+  await openNoticeTarget(router, item)
 }
 
 async function markAllAsRead() {
@@ -72,7 +65,21 @@ async function markAllAsRead() {
 
 onMounted(() => {
   notificationStore.loadNotifications(true)
+  scrollToHighlightedNotice()
 })
+
+watch([notifications, highlightedId], () => {
+  scrollToHighlightedNotice()
+})
+
+async function scrollToHighlightedNotice() {
+  if (!highlightedId.value) return
+  await nextTick()
+  document.getElementById(`notice-${highlightedId.value}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center'
+  })
+}
 </script>
 
 <style scoped>
@@ -125,6 +132,11 @@ onMounted(() => {
   border-left: 0.1875rem solid var(--gold);
 }
 
+.notification-item.highlighted {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 0.1875rem rgba(212, 168, 67, 0.18);
+}
+
 .notification-icon {
   width: 2.75rem;
   height: 2.75rem;
@@ -153,6 +165,12 @@ onMounted(() => {
 .notification-icon.service {
   background: rgba(212, 168, 67, 0.12);
   color: var(--gold);
+}
+
+/* 🔴 新增：评价通知样式 */
+.notification-icon.evaluation {
+  background: rgba(255, 193, 7, 0.12);
+  color: #f5a623;
 }
 
 .notification-icon .el-icon {

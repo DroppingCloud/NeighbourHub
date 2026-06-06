@@ -50,9 +50,17 @@ export const useNotificationStore = defineStore('notification', () => {
       supplement: 'supplement',
       booking: 'service',
       service: 'service',
+      evaluation: 'evaluation',  // 🔴 新增：评价通知类型
       system: 'progress'
     }
     return map[type || ''] || 'progress'
+  }
+
+  function normalizeRelatedType(refType?: string): Notification['relatedType'] {
+    if (refType === 'booking' || refType === 'application' || refType === 'work_order' || refType === 'proxy') {
+      return refType
+    }
+    return undefined
   }
 
   function toNotification(item: NoticeVO): Notification {
@@ -64,7 +72,7 @@ export const useNotificationStore = defineStore('notification', () => {
       isRead: item.isRead === 1,
       sendTime: item.createTime,
       relatedId: item.refId ? String(item.refId) : undefined,
-      relatedType: item.refType === 'booking' ? 'booking' : item.refType === 'application' ? 'application' : undefined
+      relatedType: normalizeRelatedType(item.refType)
     }
   }
 

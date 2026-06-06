@@ -69,10 +69,10 @@
           <el-icon><Document /></el-icon>
           <span>事项配置</span>
         </el-menu-item>
-        <el-menu-item index="/admin/service-resource">
+        <!-- <el-menu-item index="/admin/service-resource">
           <el-icon><Calendar /></el-icon>
           <span>服务资源</span>
-        </el-menu-item>
+        </el-menu-item> -->
         <el-menu-item index="/admin/user-manage">
           <el-icon><User /></el-icon>
           <span>用户管理</span>

@@ -138,7 +138,7 @@ onMounted(() => {
 }
 
 .font-size-btn:hover {
-  background: var(--cloud);
+  background: var(--bg-tertiary);
   transform: scale(1.05);
 }
 
@@ -154,6 +154,8 @@ onMounted(() => {
   padding: 0 !important;
   border-radius: 1rem !important;
   box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.12) !important;
+  background: var(--card-bg) !important;
+  border-color: var(--border-color) !important;
   max-width: min(92vw, 32rem) !important;
   width: auto !important;
   min-width: min(28rem, 92vw) !important;
@@ -188,6 +190,8 @@ onMounted(() => {
   padding: 1.25rem;
   min-width: min(26rem, 86vw);
   max-width: 100%;
+  background: var(--card-bg);
+  color: var(--text-primary);
   box-sizing: border-box;
 }
 
@@ -197,10 +201,10 @@ onMounted(() => {
   gap: 0.625rem;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--text-primary);
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 0.0625rem solid var(--border-soft);
+  border-bottom: 0.0625rem solid var(--border-color);
   flex-wrap: wrap;
 }
 
@@ -270,7 +274,8 @@ onMounted(() => {
 }
 
 .font-size-preview {
-  background: var(--cloud);
+  background: var(--bg-tertiary);
+  border: 0.0625rem solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 1.25rem;
   text-align: center;
@@ -279,7 +284,7 @@ onMounted(() => {
 }
 
 .preview-text {
-  color: var(--ink);
+  color: var(--text-primary);
   font-weight: 600;
   transition: font-size 0.1s ease;
   margin-bottom: 0.5rem;
@@ -302,13 +307,14 @@ onMounted(() => {
   padding-top: 0.5rem;
 }
 
-.font-size-preview {
-  background: var(--cloud);
+.font-size-tip {
+  display: flex;
+  align-items: flex-start;
   gap: 0.375rem;
   font-size: 0.6875rem;
   color: var(--text-muted);
   padding-top: 0.75rem;
-  border-top: 0.0625rem solid var(--border-soft);
+  border-top: 0.0625rem solid var(--border-color);
 }
 
 .preview-text {

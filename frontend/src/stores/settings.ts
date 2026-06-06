@@ -17,12 +17,18 @@ export const useSettingsStore = defineStore('settings', () => {
         return
       } catch {}
     }
+    const savedTheme = localStorage.getItem('theme')
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      darkMode.value = savedTheme === 'dark'
+      return
+    }
     // default: respect prefers-color-scheme
     darkMode.value = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
   }
 
   function save() {
     localStorage.setItem('app-settings', JSON.stringify({ darkMode: darkMode.value, notification: notification.value, sound: sound.value }))
+    localStorage.setItem('theme', darkMode.value ? 'dark' : 'light')
   }
 
   // initialize

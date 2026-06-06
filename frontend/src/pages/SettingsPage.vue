@@ -197,6 +197,7 @@ function applyTheme(isDark: boolean) {
   } else {
     html.setAttribute('data-theme', 'light')
   }
+  localStorage.setItem('theme', isDark ? 'dark' : 'light')
 }
 
 const settingsStore = useSettingsStore()

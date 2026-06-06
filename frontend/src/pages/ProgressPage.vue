@@ -171,6 +171,7 @@ function getBookingStatusType(status: string) {
   const map: Record<string, string> = {
     pending: 'info',
     confirmed: 'warning',
+    in_progress: 'primary',
     processing: 'primary',
     completed: 'success',
     cancelled: 'info'
@@ -182,6 +183,7 @@ function getBookingStatusText(status: string) {
   const map: Record<string, string> = {
     pending: '待调度',
     confirmed: '已确认',
+    in_progress: '服务中',
     processing: '服务中',
     completed: '已完成',
     cancelled: '已取消'
@@ -193,6 +195,7 @@ function getBookingStepActive(status: string): number {
   const map: Record<string, number> = {
     pending: 1,
     confirmed: 2,
+    in_progress: 3,
     processing: 3,
     completed: 4,
     cancelled: 4

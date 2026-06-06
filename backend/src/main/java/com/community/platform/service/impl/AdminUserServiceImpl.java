@@ -25,6 +25,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AdminUserServiceImpl implements AdminUserService {
 
+    private static final java.util.Set<String> BOOKING_SERVICE_TYPES =
+            java.util.Set.of("dining", "accompany", "home_visit");
+
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final ResidentProfileMapper residentProfileMapper;
@@ -53,6 +56,12 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (!"application".equals(staffType) && !"booking".equals(staffType)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "工作人员类型只能为 application 或 booking");
         }
+        String bookingServiceType = dto.getBookingServiceType() == null
+                ? ""
+                : dto.getBookingServiceType().trim().toLowerCase();
+        if ("booking".equals(staffType) && !BOOKING_SERVICE_TYPES.contains(bookingServiceType)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "服务预约工作人员必须选择服务类型");
+        }
         if (userMapper.exists(new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername()))) {
             throw new BusinessException(ResultCode.ACCOUNT_EXISTS, "用户名已存在");
         }
@@ -69,6 +78,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         user.setStatus("active");
         user.setRole("staff");
         user.setStaffType(staffType);
+        user.setBookingServiceType("booking".equals(staffType) ? bookingServiceType : null);
         user.setCommunityId(dto.getCommunityId());
         userMapper.insert(user);
 
@@ -104,6 +114,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         map.put("realName", profile == null ? null : profile.getRealName());
         map.put("role", normalizeRole(role == null ? null : role.getRoleCode()));
         map.put("staffType", user.getStaffType());
+        map.put("bookingServiceType", user.getBookingServiceType());
         map.put("communityId", user.getCommunityId());
         return map;
     }

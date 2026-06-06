@@ -403,7 +403,9 @@ function goLogin() {
   font-size: 0.6875rem;
   color: var(--text-muted);
   margin-top: 0.375rem;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
 }
 
 .node-line {
@@ -438,14 +440,15 @@ function goLogin() {
 
 .code-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.625rem;
   width: 100%;
 }
 
 .code-btn {
-  flex-shrink: 0;
+  flex: 0 1 10rem;
   min-width: 6.875rem;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .code-tip {
@@ -494,6 +497,13 @@ function goLogin() {
   gap: 0.75rem;
 }
 
+.role-radio-group :deep(.el-radio) {
+  height: auto;
+  min-height: 2.5rem;
+  margin-right: 0;
+  white-space: normal;
+}
+
 .role-tip {
   margin-top: 0.5rem;
   font-size: 0.8125rem;
@@ -504,6 +514,7 @@ function goLogin() {
 .pwd-strength {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: -0.75rem;
   margin-bottom: 0.75rem;
