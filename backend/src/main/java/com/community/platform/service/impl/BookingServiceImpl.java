@@ -222,17 +222,20 @@ public class BookingServiceImpl implements BookingService {
             throw new BusinessException(ResultCode.FORBIDDEN, "无权查看预约列表");
         }
         Long queryStaffId = admin && targetStaffUserId != null ? targetStaffUserId : staffUserId;
+        Long staffCommunityId = staff == null ? null : staff.getCommunityId();
 
         LambdaQueryWrapper<ServiceBooking> wrapper = new LambdaQueryWrapper<ServiceBooking>()
                 .orderByDesc(ServiceBooking::getCreateTime);
-        if (!admin && staff != null && staff.getCommunityId() != null) {
-            wrapper.eq(ServiceBooking::getCommunityId, staff.getCommunityId());
-        }
 
         if (StringUtils.hasText(status)) {
             if ("pending".equals(status)) {
                 wrapper.eq(ServiceBooking::getStatus, "pending")
                         .isNull(ServiceBooking::getStaffUserId);
+                if (!admin && staffCommunityId != null) {
+                    wrapper.and(w -> w.eq(ServiceBooking::getCommunityId, staffCommunityId)
+                            .or()
+                            .isNull(ServiceBooking::getCommunityId));
+                }
             } else {
                 wrapper.eq(ServiceBooking::getStatus, status)
                         .eq(ServiceBooking::getStaffUserId, queryStaffId);
@@ -241,8 +244,15 @@ public class BookingServiceImpl implements BookingService {
             if (admin && targetStaffUserId != null) {
                 wrapper.eq(ServiceBooking::getStaffUserId, queryStaffId);
             } else {
-                wrapper.and(w -> w.eq(ServiceBooking::getStatus, "pending")
-                        .isNull(ServiceBooking::getStaffUserId)
+                wrapper.and(w -> w.nested(open -> {
+                            open.eq(ServiceBooking::getStatus, "pending")
+                                    .isNull(ServiceBooking::getStaffUserId);
+                            if (!admin && staffCommunityId != null) {
+                                open.and(scope -> scope.eq(ServiceBooking::getCommunityId, staffCommunityId)
+                                        .or()
+                                        .isNull(ServiceBooking::getCommunityId));
+                            }
+                        })
                         .or(e -> e.eq(ServiceBooking::getStaffUserId, queryStaffId)));
             }
         }
