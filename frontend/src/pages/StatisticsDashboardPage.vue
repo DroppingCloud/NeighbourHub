@@ -1,103 +1,139 @@
 <template>
   <div class="statistics-container">
     <div class="page-header">
-      <div>
+      <div class="header-info">
         <h2>统计分析看板</h2>
         <p>平台运营数据统计与分析</p>
       </div>
-      <el-button :loading="loading" @click="loadStatistics">
-        <el-icon><Refresh /></el-icon>
-        刷新
-      </el-button>
-    </div>
-
-    <div class="stats-grid" v-loading="loading">
-      <div class="stat-card">
-        <div class="stat-icon blue">
-          <el-icon><Document /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ overview.totalApplications }}</div>
-          <div class="stat-label">申请总数</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon orange">
-          <el-icon><Tickets /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ overview.pendingCount }}</div>
-          <div class="stat-label">待审核申请</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon green">
-          <el-icon><CircleCheck /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ overview.completedCount }}</div>
-          <div class="stat-label">已办结申请</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon purple">
-          <el-icon><Calendar /></el-icon>
-        </div>
-        <div class="stat-info">
-          <div class="stat-value">{{ overview.serviceBookingCount }}</div>
-          <div class="stat-label">预约总数</div>
-        </div>
+      <div class="header-actions">
+        <el-button :loading="loading" @click="loadStatistics" class="refresh-btn">
+          <el-icon><Refresh /></el-icon>
+          刷新数据
+        </el-button>
       </div>
     </div>
 
+    <!-- 核心指标卡片 -->
+    <div class="kpi-grid" v-loading="loading">
+      <div class="kpi-card">
+        <div class="kpi-visual blue">
+          <div class="kpi-icon"><el-icon><Document /></el-icon></div>
+          <div class="kpi-ring"></div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">{{ overview.totalApplications }}</div>
+          <div class="kpi-label">申请总数</div>
+          <div class="kpi-trend">累计办理事项</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-visual orange">
+          <div class="kpi-icon"><el-icon><Tickets /></el-icon></div>
+          <div class="kpi-ring"></div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">{{ overview.pendingCount }}</div>
+          <div class="kpi-label">待审核</div>
+          <div class="kpi-trend warning">需及时处理</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-visual green">
+          <div class="kpi-icon"><el-icon><CircleCheck /></el-icon></div>
+          <div class="kpi-ring"></div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">{{ overview.completedCount }}</div>
+          <div class="kpi-label">已办结</div>
+          <div class="kpi-trend success">服务完成</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-visual purple">
+          <div class="kpi-icon"><el-icon><Calendar /></el-icon></div>
+          <div class="kpi-ring"></div>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">{{ overview.serviceBookingCount }}</div>
+          <div class="kpi-label">预约总数</div>
+          <div class="kpi-trend">便民服务</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图表区 第一行 -->
     <div class="charts-row">
-      <div class="chart-card half">
+      <div class="chart-card chart-primary">
         <div class="chart-header">
-          <h3>最近申请趋势</h3>
-          <span class="chart-subtitle">来自数据库申请提交时间</span>
+          <div class="chart-title-group">
+            <h3>申请趋势</h3>
+            <span class="chart-badge">近期数据</span>
+          </div>
+          <span class="chart-subtitle">基于提交时间统计</span>
         </div>
-        <div ref="trendChartRef" class="chart-container"></div>
+        <div ref="trendChartRef" class="chart-body"></div>
       </div>
-      <div class="chart-card half">
+      <div class="chart-card chart-secondary">
         <div class="chart-header">
-          <h3>申请状态分布</h3>
-          <span class="chart-subtitle">实时统计申请状态</span>
+          <div class="chart-title-group">
+            <h3>状态分布</h3>
+            <span class="chart-badge">实时</span>
+          </div>
+          <span class="chart-subtitle">各状态占比</span>
         </div>
-        <div ref="statusChartRef" class="chart-container"></div>
+        <div ref="statusChartRef" class="chart-body"></div>
       </div>
     </div>
 
+    <!-- 图表区 第二行 -->
     <div class="charts-row">
-      <div class="chart-card half">
+      <div class="chart-card chart-secondary">
         <div class="chart-header">
-          <h3>事项申请排行</h3>
-          <span class="chart-subtitle">按事项 ID 聚合</span>
+          <div class="chart-title-group">
+            <h3>事项排行</h3>
+            <span class="chart-badge gold">热门</span>
+          </div>
+          <span class="chart-subtitle">按申请量排序</span>
         </div>
-        <div ref="itemChartRef" class="chart-container"></div>
+        <div ref="itemChartRef" class="chart-body"></div>
       </div>
-      <div class="chart-card half">
+      <div class="chart-card chart-primary">
         <div class="chart-header">
-          <h3>社区服务统计</h3>
-          <span class="chart-subtitle">按服务类型和状态聚合</span>
+          <div class="chart-title-group">
+            <h3>服务统计</h3>
+            <span class="chart-badge">预约类</span>
+          </div>
+          <span class="chart-subtitle">按服务类型聚合</span>
         </div>
-        <div ref="serviceChartRef" class="chart-container"></div>
+        <div ref="serviceChartRef" class="chart-body"></div>
       </div>
     </div>
 
-    <div class="data-table-card">
+    <!-- 数据明细表 -->
+    <div class="detail-card">
       <div class="chart-header">
-        <h3>事项办理统计</h3>
+        <div class="chart-title-group">
+          <h3>事项办理明细</h3>
+          <span class="chart-badge">汇总</span>
+        </div>
       </div>
-      <el-table :data="itemStats" stripe style="width: 100%">
+      <el-table :data="itemStats" stripe style="width: 100%" class="detail-table">
         <el-table-column prop="itemId" label="事项 ID" min-width="120" />
-        <el-table-column prop="count" label="申请数量" min-width="120" sortable />
+        <el-table-column prop="count" label="申请数量" min-width="120" sortable>
+          <template #default="{ row }">
+            <div class="count-cell">
+              <span class="count-value">{{ row.count }}</span>
+              <div class="count-bar" :style="{ width: getBarWidth(row.count) }"></div>
+            </div>
+          </template>
+        </el-table-column>
       </el-table>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { Calendar, CircleCheck, Document, Refresh, Tickets } from '@element-plus/icons-vue'
 import { getItemStats, getOverview, getServiceStats, type StatisticsOverview } from '@/api/statistics'
@@ -130,6 +166,12 @@ const overview = ref<StatisticsOverview>({
 const itemStats = ref<ItemStat[]>([])
 const serviceStats = ref<ServiceStat[]>([])
 
+const maxCount = computed(() => Math.max(...itemStats.value.map(r => toNumber(r.count)), 1))
+
+function getBarWidth(count: number | string | undefined) {
+  return `${(toNumber(count) / maxCount.value) * 100}%`
+}
+
 function toNumber(value: unknown) {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -137,6 +179,19 @@ function toNumber(value: unknown) {
 
 function dayLabel(row: Record<string, any>) {
   return String(row.day || row.date || row.submitDate || '-')
+}
+
+// Color palette
+const palette = {
+  ink: '#1a1a2e',
+  inkLight: '#2d3561',
+  gold: '#d4a843',
+  goldLight: '#f0c96e',
+  jade: '#27ae60',
+  vermilion: '#c0392b',
+  blue: '#3b82f6',
+  purple: '#8b5cf6',
+  orange: '#f59e0b'
 }
 
 function initCharts() {
@@ -148,30 +203,71 @@ function initCharts() {
 
 function renderCharts() {
   const trendRows = overview.value.dailyTrend || []
+
   trendChart?.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { top: 24, left: 36, right: 18, bottom: 28, containLabel: true },
-    xAxis: { type: 'category', data: trendRows.map(dayLabel) },
-    yAxis: { type: 'value', name: '数量' },
-    series: [
-      {
-        name: '申请数',
-        type: 'line',
-        smooth: true,
-        data: trendRows.map(row => toNumber((row as any).count)),
-        lineStyle: { color: '#2d3561', width: 2 },
-        areaStyle: { opacity: 0.08 }
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(26, 26, 46, 0.92)',
+      borderColor: 'transparent',
+      textStyle: { color: '#fff', fontSize: 12 }
+    },
+    grid: { top: 20, left: 12, right: 20, bottom: 20, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: trendRows.map(dayLabel),
+      axisLine: { lineStyle: { color: 'rgba(26,26,46,0.1)' } },
+      axisLabel: { color: '#9090aa', fontSize: 11 },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: 'rgba(26,26,46,0.06)', type: 'dashed' } },
+      axisLabel: { color: '#9090aa', fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    series: [{
+      name: '申请数',
+      type: 'line',
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
+      data: trendRows.map(row => toNumber((row as any).count)),
+      lineStyle: { color: palette.ink, width: 2.5 },
+      itemStyle: { color: palette.ink, borderWidth: 2, borderColor: '#fff' },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(45, 53, 97, 0.15)' },
+          { offset: 1, color: 'rgba(45, 53, 97, 0.02)' }
+        ])
       }
-    ]
+    }]
   })
 
   statusChart?.setOption({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(26, 26, 46, 0.92)',
+      borderColor: 'transparent',
+      textStyle: { color: '#fff', fontSize: 12 }
+    },
+    legend: {
+      bottom: 8,
+      textStyle: { color: '#9090aa', fontSize: 11 },
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 16
+    },
+    color: [palette.orange, palette.jade, palette.gold, palette.blue, palette.vermilion],
     series: [{
       type: 'pie',
-      radius: ['40%', '65%'],
-      center: ['50%', '45%'],
+      radius: ['44%', '68%'],
+      center: ['50%', '42%'],
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 13, fontWeight: 600 },
+        itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.15)' }
+      },
       data: [
         { name: '待审核', value: overview.value.pendingCount },
         { name: '已通过', value: overview.value.approvedCount },
@@ -183,23 +279,103 @@ function renderCharts() {
   })
 
   itemChart?.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { top: 20, left: 48, right: 18, bottom: 28, containLabel: true },
-    xAxis: { type: 'value', name: '申请数' },
-    yAxis: { type: 'category', data: itemStats.value.map(row => `事项 ${row.itemId ?? '-'}`) },
-    series: [{ type: 'bar', data: itemStats.value.map(row => toNumber(row.count)), itemStyle: { color: '#d4a843' } }]
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      backgroundColor: 'rgba(26, 26, 46, 0.92)',
+      borderColor: 'transparent',
+      textStyle: { color: '#fff', fontSize: 12 }
+    },
+    grid: { top: 12, left: 12, right: 20, bottom: 12, containLabel: true },
+    xAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: 'rgba(26,26,46,0.06)', type: 'dashed' } },
+      axisLabel: { color: '#9090aa', fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'category',
+      data: itemStats.value.map(row => `事项 ${row.itemId ?? '-'}`),
+      axisLine: { lineStyle: { color: 'rgba(26,26,46,0.1)' } },
+      axisLabel: { color: '#5a5a7a', fontSize: 11 },
+      axisTick: { show: false }
+    },
+    series: [{
+      type: 'bar',
+      barWidth: 18,
+      data: itemStats.value.map(row => toNumber(row.count)),
+      itemStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+          { offset: 0, color: palette.gold },
+          { offset: 1, color: palette.goldLight }
+        ]),
+        borderRadius: [0, 4, 4, 0]
+      }
+    }]
+  })
+
+  const serviceTypeMap: Record<string, string> = {
+    dining: '助餐', accompany: '陪诊', home_visit: '上门'
+  }
+  const statusMap: Record<string, string> = {
+    pending: '待确认', confirmed: '已确认', in_progress: '进行中',
+    completed: '已完成', cancelled: '已取消'
+  }
+
+  // 为每种服务类型分配一个主色调，状态通过透明度区分
+  const serviceTypeColors: Record<string, { h: number; s: number; l: number }> = {
+    dining:     { h: 210, s: 70, l: 55 },   // 蓝色系
+    accompany:  { h: 155, s: 55, l: 42 },   // 绿色系
+    home_visit: { h: 38,  s: 80, l: 55 }    // 金色系
+  }
+  // 状态映射到明度偏移：越靠前的状态越深
+  const statusLightness: Record<string, number> = {
+    pending: 0, confirmed: 8, in_progress: -5, completed: 16, cancelled: 28
+  }
+
+  function getServiceColor(type: string, status: string): string {
+    const base = serviceTypeColors[type] || { h: 270, s: 50, l: 50 }
+    const offset = statusLightness[status] ?? 12
+    return `hsl(${base.h}, ${base.s}%, ${base.l + offset}%)`
+  }
+
+  // 先按服务类型分组排序，同类放在一起
+  const sortedServiceData = [...serviceStats.value].sort((a, b) => {
+    const typeOrder = ['dining', 'accompany', 'home_visit']
+    return typeOrder.indexOf(a.serviceType || '') - typeOrder.indexOf(b.serviceType || '')
   })
 
   serviceChart?.setOption({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 0 },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(26, 26, 46, 0.92)',
+      borderColor: 'transparent',
+      textStyle: { color: '#fff', fontSize: 12 },
+      formatter: (params: any) => {
+        return `<strong>${params.name}</strong><br/>数量: ${params.value}（${params.percent}%）`
+      }
+    },
+    legend: {
+      bottom: 8,
+      textStyle: { color: '#9090aa', fontSize: 11 },
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 12
+    },
     series: [{
       type: 'pie',
-      radius: '60%',
-      center: ['50%', '45%'],
-      data: serviceStats.value.map(row => ({
-        name: `${row.serviceType || '未知'}-${row.status || '未知'}`,
-        value: toNumber(row.count)
+      radius: ['36%', '64%'],
+      center: ['50%', '42%'],
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 12, fontWeight: 600 },
+        itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.15)' }
+      },
+      data: sortedServiceData.map(row => ({
+        name: `${serviceTypeMap[row.serviceType || ''] || row.serviceType || '未知'}·${statusMap[row.status || ''] || row.status || '未知'}`,
+        value: toNumber(row.count),
+        itemStyle: { color: getServiceColor(row.serviceType || '', row.status || '') }
       }))
     }]
   })
@@ -251,11 +427,11 @@ onUnmounted(() => {
 .statistics-container {
   max-width: 75rem;
   margin: 0 auto;
-  padding: 0 1rem;
 }
 
+/* Page Header */
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -264,43 +440,73 @@ onUnmounted(() => {
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.375rem;
 }
 
-.page-header p,
-.chart-subtitle {
+.page-header p {
   font-size: 0.875rem;
   color: var(--text-muted);
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
-  gap: 1.25rem;
-  margin-bottom: 1.5rem;
+.refresh-btn {
+  border-radius: 2rem !important;
+  padding: 0.5rem 1.25rem !important;
 }
 
-.stat-card,
-.chart-card,
-.data-table-card {
+/* KPI Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.kpi-card {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  box-shadow: var(--shadow-sm);
-}
-
-.stat-card {
+  padding: 1.5rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.stat-icon {
-  width: 3rem;
-  height: 3rem;
+.kpi-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  opacity: 0.04;
+  transform: translate(30%, -30%);
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.kpi-visual {
+  position: relative;
+  width: 3.5rem;
+  height: 3.5rem;
+  flex-shrink: 0;
+}
+
+.kpi-icon {
+  position: relative;
+  z-index: 1;
+  width: 3.5rem;
+  height: 3.5rem;
   border-radius: 1rem;
   display: flex;
   align-items: center;
@@ -308,49 +514,82 @@ onUnmounted(() => {
   font-size: 1.5rem;
 }
 
-.stat-icon.blue {
-  background: rgba(45, 53, 97, 0.1);
-  color: #2d3561;
+.kpi-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 1.125rem;
+  opacity: 0.15;
+  animation: kpi-pulse 3s ease-in-out infinite;
 }
 
-.stat-icon.green {
-  background: rgba(39, 174, 96, 0.1);
-  color: #27ae60;
+@keyframes kpi-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.15; }
+  50% { transform: scale(1.08); opacity: 0.08; }
 }
 
-.stat-icon.orange {
-  background: rgba(230, 126, 34, 0.1);
-  color: #e67e22;
+.kpi-visual.blue .kpi-icon { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+.kpi-visual.blue .kpi-ring { background: #3b82f6; }
+.kpi-visual.blue + .kpi-body .kpi-value { color: #2d3561; }
+
+.kpi-visual.orange .kpi-icon { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+.kpi-visual.orange .kpi-ring { background: #f59e0b; }
+
+.kpi-visual.green .kpi-icon { background: rgba(39, 174, 96, 0.1); color: #27ae60; }
+.kpi-visual.green .kpi-ring { background: #27ae60; }
+
+.kpi-visual.purple .kpi-icon { background: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
+.kpi-visual.purple .kpi-ring { background: #8b5cf6; }
+
+.kpi-body {
+  flex: 1;
+  min-width: 0;
 }
 
-.stat-icon.purple {
-  background: rgba(155, 89, 182, 0.1);
-  color: #9b59b6;
-}
-
-.stat-value {
-  font-size: 1.75rem;
+.kpi-value {
+  font-size: 1.875rem;
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.2;
+  line-height: 1.1;
+  margin-bottom: 0.25rem;
 }
 
-.stat-label {
-  font-size: 0.8125rem;
+.kpi-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.kpi-trend {
+  font-size: 0.6875rem;
   color: var(--text-muted);
   margin-top: 0.25rem;
 }
 
+.kpi-trend.warning { color: #f59e0b; }
+.kpi-trend.success { color: #27ae60; }
+
+/* Charts */
 .charts-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
   gap: 1.25rem;
   margin-bottom: 1.25rem;
-  flex-wrap: wrap;
 }
 
-.chart-card.half {
-  flex: 1;
-  min-width: 18rem;
+.charts-row:nth-child(4) {
+  grid-template-columns: 0.8fr 1.2fr;
+}
+
+.chart-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.3s;
+}
+
+.chart-card:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .chart-header {
@@ -362,6 +601,12 @@ onUnmounted(() => {
   gap: 0.5rem;
 }
 
+.chart-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
 .chart-header h3 {
   font-size: 1rem;
   font-weight: 600;
@@ -369,36 +614,112 @@ onUnmounted(() => {
   margin: 0;
 }
 
-.chart-container {
-  width: 100%;
-  height: 17.5rem;
+.chart-badge {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 1rem;
+  background: rgba(45, 53, 97, 0.08);
+  color: var(--text-muted);
+  text-transform: uppercase;
 }
 
-.data-table-card {
-  margin-top: 0;
+.chart-badge.gold {
+  background: rgba(212, 168, 67, 0.12);
+  color: var(--gold);
+}
+
+.chart-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.chart-body {
+  width: 100%;
+  height: 18rem;
+}
+
+/* Detail Table */
+.detail-card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.detail-table {
+  margin-top: 0.5rem;
+}
+
+.count-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.count-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 2rem;
+}
+
+.count-bar {
+  height: 0.375rem;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  border-radius: 0.25rem;
+  transition: width 0.6s ease;
+  max-width: 12rem;
+}
+
+:deep(.el-table) {
+  background: transparent !important;
 }
 
 :deep(.el-table th) {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  border-bottom: none !important;
 }
 
 :deep(.el-table td) {
-  color: var(--text-secondary);
-  border-bottom-color: var(--border-color);
+  color: var(--text-secondary) !important;
+  border-bottom-color: var(--border-color) !important;
 }
 
+:deep(.el-table tr:hover td) {
+  background: rgba(212, 168, 67, 0.04) !important;
+}
+
+/* Responsive */
 @media (max-width: 48rem) {
-  .stats-grid {
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .charts-row,
+  .charts-row:nth-child(4) {
     grid-template-columns: 1fr;
   }
 
-  .chart-card.half {
-    min-width: 100%;
+  .chart-body {
+    height: 14rem;
   }
 
-  .chart-container {
-    height: 14rem;
+  .kpi-card {
+    padding: 1.25rem;
+  }
+
+  .kpi-value {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 30rem) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

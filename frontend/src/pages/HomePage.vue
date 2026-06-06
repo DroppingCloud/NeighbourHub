@@ -181,7 +181,7 @@ function getStatusText(status: string) {
   background: linear-gradient(135deg, var(--ink) 0%, var(--ink-light) 100%);
   border-radius: var(--radius-lg);
   padding: 2rem 2.5rem;
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -193,7 +193,7 @@ function getStatusText(status: string) {
 .banner-content h2 {
   font-family: var(--font-serif);
   font-size: 1.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .banner-content p {
@@ -230,7 +230,7 @@ function getStatusText(status: string) {
 }
 
 .quick-actions {
-  margin-bottom: 2rem;
+  margin-bottom: 1.75rem;
 }
 
 .action-grid {
@@ -271,8 +271,8 @@ function getStatusText(status: string) {
 .recent-applications {
   background: var(--card-bg);
   border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  margin-bottom: 2rem;
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.75rem;
   box-shadow: var(--shadow-sm);
 }
 

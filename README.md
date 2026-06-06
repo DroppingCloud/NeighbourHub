@@ -69,22 +69,6 @@ docker compose -p community-service up -d
 docker compose -p community-service ps
 ```
 
-查看日志：
-
-```bash
-docker compose -p community-service logs -f mysql
-docker compose -p community-service logs -f redis
-```
-停止所有服务
-```bash
-docker compose down
-```
-
-停止并删除数据卷
-```bash
-docker compose down -v
-```
-
 **更新/重建数据库**
 
 ```bash
@@ -95,6 +79,11 @@ docker exec community_mysql sh -c "mysql --default-character-set=utf8mb4 -uroot 
 # 重建数据库
 docker compose -p community-service down -v
 docker compose -p community-service up -d
+```
+
+**加入测试数据**
+```bash
+docker exec -i community_mysql mysql -uroot -p123456 community_service < doc/database/test_data.sql 
 ```
 
 ### 3.2 启动后端

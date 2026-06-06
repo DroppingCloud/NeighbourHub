@@ -142,31 +142,32 @@ function normalizeRole(role: string) {
 <style scoped>
 .booking-container {
   width: 100%;
-  max-width: 56.25rem;
+  max-width: 75rem;
   margin: 0 auto;
-  padding: 0 1rem;
 }
 
 .page-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .page-header h2 {
+  font-family: var(--font-serif);
   font-size: 1.5rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.375rem;
 }
 
 .page-header p {
   color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .service-types {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.75rem, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
 }
 
 .type-card {
@@ -199,8 +200,8 @@ function normalizeRole(role: string) {
 
 .booking-form {
   background: var(--card-bg);
-  border-radius: 1rem;
-  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 2rem;
   box-shadow: var(--shadow-sm);
 }
 

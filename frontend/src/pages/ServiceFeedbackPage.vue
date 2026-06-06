@@ -215,9 +215,8 @@ onMounted(loadBooking)
 <style scoped>
 /* 原有样式保持不变 */
 .feedback-container {
-  max-width: 56.25rem;
+  max-width: 75rem;
   margin: 0 auto;
-  padding: 0 1rem;
 }
 
 .page-header,

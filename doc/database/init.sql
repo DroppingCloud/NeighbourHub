@@ -1,6 +1,6 @@
 -- ============================================================
 -- 社区服务协同平台 数据库初始化脚本
--- Version: V1.2.0
+-- Version: V1.3.0
 -- Database: community_service
 -- Charset: utf8mb4 / utf8mb4_unicode_ci
 -- 执行方式: mysql -u root -p < init.sql
@@ -21,7 +21,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS `user` (
   `user_id`     BIGINT       NOT NULL AUTO_INCREMENT COMMENT '用户 ID',
   `username`    VARCHAR(50)  NOT NULL                COMMENT '登录用户名',
-  `account`     VARCHAR(50)  DEFAULT NULL            COMMENT '系统分配账号',
+  `account`     VARCHAR(50)  DEFAULT NULL            COMMENT '账号（如 SQxxxx）',
   `password`    VARCHAR(100) NOT NULL                COMMENT 'BCrypt 密码哈希',
   `phone`       VARCHAR(20)  DEFAULT NULL            COMMENT '手机号',
   `email`       VARCHAR(100) DEFAULT NULL            COMMENT '邮箱',
@@ -282,13 +282,13 @@ CREATE TABLE IF NOT EXISTS `notice` (
 -- ============================================================
 
 INSERT IGNORE INTO `user`
-  (`user_id`, `username`, `password`, `phone`, `status`, `role`, `staff_type`, `community_id`)
+  (`user_id`, `username`, `account`, `password`, `phone`, `status`, `role`, `staff_type`, `community_id`)
 VALUES
-  (1, 'admin',      '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', NULL, 1),
-  (2, 'staff01',    '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 'application', 1),
-  (5, 'booking01',  '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13844444444', 'active', 'staff', 'booking', 1),
-  (3, 'resident01', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', NULL, 1),
-  (4, 'family01',   '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', NULL, 1);
+  (1, 'admin',      'SQ0001', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', NULL, 1),
+  (2, 'staff01',    'SQ0002', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 'application', 1),
+  (5, 'booking01',  'SQ0005', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13844444444', 'active', 'staff', 'booking', 1),
+  (3, 'resident01', 'SQ0003', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', NULL, 1),
+  (4, 'family01',   'SQ0004', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', NULL, 1);
 
 INSERT IGNORE INTO `user_role` (`user_id`, `role_code`) VALUES
   (1, 'ROLE_ADMIN'),

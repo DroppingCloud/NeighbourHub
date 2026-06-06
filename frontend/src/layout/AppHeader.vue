@@ -2,7 +2,7 @@
   <header class="app-header">
     <div class="header-left">
       <div class="logo">
-        <span class="logo-icon">社</span>
+        <img class="logo-icon" src="@/assets/logo.png" alt="智慧社区服务平台" />
         <span class="logo-text">智慧社区服务平台</span>
       </div>
     </div>
@@ -164,15 +164,8 @@ function normalizeRole(role: string) {
 .logo-icon {
   width: 2.5rem;
   height: 2.5rem;
-  background: var(--ink);
   border-radius: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-serif);
-  font-size: 1.25rem;
-  color: var(--gold-light);
-  font-weight: 700;
+  object-fit: contain;
 }
 
 .logo-text {
