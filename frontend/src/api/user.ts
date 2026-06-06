@@ -34,7 +34,7 @@ export const bindProxy = (data: ProxyBindRequest) =>
   request.post<any, number>('/api/proxy/bind', data)
 
 export const getProxyRelations = () =>
-  request.get<any, ProxyRelationVO[]>('/api/proxy/list')
+  request.get<any, ProxyRelationVO[]>('/api/proxy/list', { headers: { 'X-Skip-Proxy': 'true' } })
 
 export const revokeProxyRelation = (id: number) =>
   request.put<any, void>(`/api/proxy/${id}/revoke`)
@@ -44,11 +44,23 @@ export const getUsersByRole = (role?: string, pageNum = 1, pageSize = 10) =>
     params: { role: role || undefined, pageNum, pageSize }
   })
 
+export interface StaffCreateRequest {
+  username: string
+  realName: string
+  phone?: string
+  email?: string
+  communityId?: number
+  staffType: 'application' | 'booking'
+}
+
+export const createStaff = (data: StaffCreateRequest) =>
+  request.post<any, number>('/api/admin/staff', data)
+
 export const applyProxy = (data: ProxyApplyRequest) =>
   request.post<any, number>('/api/proxy/apply', data)
 
 export const getPendingRequests = () =>
-  request.get<any, ProxyRelationVO[]>('/api/proxy/pending-requests')
+  request.get<any, ProxyRelationVO[]>('/api/proxy/pending-requests', { headers: { 'X-Skip-Proxy': 'true' } })
 
 export const confirmProxy = (id: number) =>
   request.put<any, void>(`/api/proxy/${id}/confirm`)

@@ -5,6 +5,17 @@
       <p>选择您需要办理的政务服务事项</p>
     </div>
 
+    <el-alert
+      v-if="familyNeedsBinding"
+      class="family-blocker"
+      title="请先绑定社区用户"
+      description="家属用户需要先在“家属代办”中提交绑定申请，并由居民确认后，才能代居民提交事项申请。"
+      type="warning"
+      show-icon
+      :closable="false"
+    />
+
+    <template v-else>
     <div class="service-grid" v-loading="loading">
       <div
         v-for="service in govServices"
@@ -22,6 +33,7 @@
     </div>
 
     <el-empty v-if="!loading && govServices.length === 0" description="暂无可办理事项" />
+    </template>
 
     <el-drawer
       v-model="showFormDrawer"
@@ -288,6 +300,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormRules } from 'element-plus'
 import { Document, InfoFilled, Check, House, OfficeBuilding, School } from '@element-plus/icons-vue'
 import { getPublicMaterialTemplates, getPublicServiceItemList } from '@/api/serviceItem'
+import { getMe, type UserInfoVO } from '@/api/auth'
+import { useAuthStore } from '@/stores/auth'
 import { useProxyStore } from '@/stores/proxy'
 import {
   isIdentityDocumentMaterial,
@@ -305,8 +319,10 @@ const loading = ref(false)
 const formRef = ref()
 const materialDialogVisible = ref(false)
 const activeMaterial = ref<any>(null)
+const authStore = useAuthStore()
 const proxyStore = useProxyStore()
 const restoringDraft = ref(false)
+const currentUserProfile = ref<UserInfoVO | null>(null)
 const APPLICATION_DRAFT_PREFIX = 'neighbourhub:application-draft:'
 const datePickerPopperOptions = {
   strategy: 'fixed',
@@ -344,6 +360,33 @@ function createEmptyApplyForm() {
 }
 
 const applyForm = ref(createEmptyApplyForm())
+const isFamily = computed(() => normalizeRole(authStore.userInfo?.role || '') === 'family')
+const familyNeedsBinding = computed(() => isFamily.value && !proxyStore.currentTarget)
+
+async function loadCurrentUserProfile() {
+  if (currentUserProfile.value) return currentUserProfile.value
+  try {
+    currentUserProfile.value = await getMe()
+    return currentUserProfile.value
+  } catch {
+    return null
+  }
+}
+
+async function prefillApplyFormFromProfile() {
+  const profile = await loadCurrentUserProfile()
+  if (!profile) return
+
+  if (!String(applyForm.value.name || '').trim() && profile.realName) {
+    applyForm.value.name = profile.realName
+  }
+  if (!String(applyForm.value.phone || '').trim() && profile.phone) {
+    applyForm.value.phone = profile.phone
+  }
+  if (!String(applyForm.value.address || '').trim() && profile.address) {
+    applyForm.value.address = profile.address
+  }
+}
 
 function resetApplyState() {
   applyForm.value = createEmptyApplyForm()
@@ -798,6 +841,7 @@ async function selectService(service: any) {
     materials: mergeMaterials(templates, service.materials)
   }
   await restoreDraftForService(service.id)
+  await prefillApplyFormFromProfile()
 }
 
 async function loadServices() {
@@ -864,6 +908,10 @@ function disableResidenceEndDate(date: Date) {
 }
 
 async function nextStep() {
+  if (familyNeedsBinding.value) {
+    ElMessage.warning('请先绑定社区用户后再代办事项申请')
+    return
+  }
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid || !validateResidencePeriod()) return
 
@@ -1097,7 +1145,18 @@ function withTemplateIds(materials: any[], templates: any[]) {
   })
 }
 
-onMounted(loadServices)
+onMounted(async () => {
+  if (isFamily.value) {
+    await proxyStore.restoreTarget()
+  } else {
+    proxyStore.clearTarget()
+  }
+  await loadServices()
+})
+
+function normalizeRole(role: string) {
+  return role.replace(/^ROLE_/, '').toLowerCase()
+}
 </script>
 
 <style scoped>
@@ -1127,6 +1186,10 @@ onMounted(loadServices)
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(11.25rem, 1fr));
   gap: 1rem;
+}
+
+.family-blocker {
+  margin-bottom: 1.5rem;
 }
 
 .service-card {

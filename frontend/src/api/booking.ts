@@ -20,6 +20,8 @@ export interface BookingVO {
   staffPhone?: string
   feedback?: string
   createTime: string
+  isProxy?: boolean
+  proxyUserName?: string
 }
 
 export const createBooking = (data: BookingRequest) =>
@@ -34,8 +36,8 @@ export const getBookingDetail = (id: number) =>
 export const cancelBooking = (id: number) =>
   request.put<any, void>(`/api/booking/${id}/cancel`)
 
-export const assignBooking = (id: number, staffUserId: number) =>
-  request.put<any, void>(`/api/booking/${id}/assign`, { staffUserId })
+export const assignBooking = (id: number) =>
+  request.put<any, void>(`/api/booking/${id}/claim`)
 
 export function startBooking(bookingId: number) {
   return request.put<any, void>(`/api/booking/${bookingId}/start`)
@@ -47,9 +49,10 @@ export const completeBooking = (id: number, feedback?: string) =>
 export const submitBookingFeedback = (id: number, feedback: string) =>
   request.post<any, void>(`/api/booking/${id}/feedback`, { feedback })
 
-export function getStaffBookingList(pageNum: number, pageSize: number, status?: string) {
+export function getStaffBookingList(pageNum: number, pageSize: number, status?: string, staffUserId?: number) {
   const params: any = { pageNum, pageSize }
   if (status) params.status = status
+  if (staffUserId) params.staffUserId = staffUserId
   return request.get<any, any>('/api/booking/staff/list', { params })
 }
 

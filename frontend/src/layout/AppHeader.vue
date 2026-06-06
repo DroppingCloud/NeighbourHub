@@ -65,7 +65,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const proxyStore = useProxyStore()
 
-const isFamily = computed(() => authStore.userInfo?.role === 'family')
+const isFamily = computed(() => normalizeRole(authStore.userInfo?.role || '') === 'family')
 const currentProxyLabel = computed(() => {
   if (!proxyStore.currentTarget) return '本人'
   return `${proxyStore.currentTarget.name}（${proxyStore.currentTarget.relation}）`
@@ -119,15 +119,22 @@ async function handleCommand(command: string) {
 onMounted(() => {
   if (isFamily.value) {
     proxyStore.restoreTarget()
+  } else {
+    proxyStore.clearTarget()
   }
 })
 
 const avatarSrc = computed(() => {
   const base = import.meta.env.VITE_API_BASE_URL ?? ''
-  const uid = (authStore.userInfo as any)?.userId
-  if (!uid) return ''
+  const userInfo = authStore.userInfo as any
+  const uid = userInfo?.userId
+  if (!uid || !userInfo?.avatar) return ''
   return (base || '') + `/api/auth/avatar/${uid}`
 })
+
+function normalizeRole(role: string) {
+  return role.replace(/^ROLE_/, '').toLowerCase()
+}
 </script>
 
 <style scoped>

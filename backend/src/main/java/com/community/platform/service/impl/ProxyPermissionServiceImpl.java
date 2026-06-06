@@ -58,7 +58,7 @@ public class ProxyPermissionServiceImpl implements ProxyPermissionService {
             Set<String> actions = Arrays.stream(authorizedActions.split(","))
                     .map(String::trim)
                     .collect(Collectors.toSet());
-            if (!actions.contains(actionType)) {
+            if (!isActionAuthorized(actions, actionType)) {
                 throw new BusinessException(ResultCode.FORBIDDEN, "您没有被授权执行此操作");
             }
         }
@@ -85,7 +85,7 @@ public class ProxyPermissionServiceImpl implements ProxyPermissionService {
             Set<String> actions = Arrays.stream(authorizedActions.split(","))
                     .map(String::trim)
                     .collect(Collectors.toSet());
-            if (!actions.contains(actionType)) {
+            if (!isActionAuthorized(actions, actionType)) {
                 throw new BusinessException(ResultCode.FORBIDDEN, "您没有被授权执行此操作");
             }
         }
@@ -112,6 +112,17 @@ public class ProxyPermissionServiceImpl implements ProxyPermissionService {
         Set<String> actions = Arrays.stream(authorizedActions.split(","))
                 .map(String::trim)
                 .collect(Collectors.toSet());
-        return actions.contains(actionType);
+        return isActionAuthorized(actions, actionType);
+    }
+
+    private boolean isActionAuthorized(Set<String> actions, String actionType) {
+        if (actions.contains(actionType)) {
+            return true;
+        }
+        // 兼容早期数据中使用 application 表示“事项申请+查询”的授权写法。
+        if ("application".equals(actionType)) {
+            return actions.contains("application") || actions.contains("apply") || actions.contains("query");
+        }
+        return ("apply".equals(actionType) || "query".equals(actionType)) && actions.contains("application");
     }
 }

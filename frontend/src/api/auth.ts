@@ -10,6 +10,7 @@ export interface LoginResponse {
   userId: number
   username: string
   roles: string[]
+  staffType?: string
 }
 
 export interface RegisterRequest {
@@ -18,7 +19,7 @@ export interface RegisterRequest {
   phone?: string
   realName: string
   idCard: string
-  role?: string
+  role?: 'resident' | 'family'
   account?: string
 }
 
@@ -35,6 +36,7 @@ export interface UserInfoVO {
   gender?: string
   birthday?: string
   avatar?: string
+  staffType?: string
 }
 
 export const login = (data: LoginRequest): Promise<LoginResponse> =>

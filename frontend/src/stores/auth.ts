@@ -10,6 +10,7 @@ export const useAuthStore = defineStore('auth', () => {
     role: string
     realName?: string
     avatar?: string
+    staffType?: string
   }
 
   const savedUserInfo = localStorage.getItem('userInfo')

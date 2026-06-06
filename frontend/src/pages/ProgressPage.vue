@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Check } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import { getApplicationList, type ApplicationVO } from '@/api/application'
 import { getBookingList, type BookingVO } from '@/api/booking'
 import { watch } from 'vue'
@@ -115,6 +116,10 @@ async function loadProgress() {
     ])
     applications.value = getPageRows<ApplicationVO>(appPage)
     bookings.value = getPageRows<BookingVO>(bookingPage)
+  } catch (error: any) {
+    applications.value = []
+    bookings.value = []
+    ElMessage.error(error?.message || '加载进度失败')
   } finally {
     loadingApplications.value = false
     loadingBookings.value = false

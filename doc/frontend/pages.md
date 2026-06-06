@@ -28,7 +28,7 @@
 | `/admin/dashboard` | `AdminDashboardPage.vue` | 后台管理 | 管理员 | 已实现 | 管理端概览和功能入口 |
 | `/admin/service-config` | `AdminServiceConfigPage.vue` | 事项配置 | 管理员 | 基础实现 | 事项和材料模板增删改查 |
 | `/admin/service-resource` | `ServiceResourcePage.vue` | 服务资源 | 管理员 | 暂未开放 | 服务资源、时段和排班尚未建模，页面显示说明和跳转入口 |
-| `/admin/user-manage` | `AdminUserManagePage.vue` | 用户管理 | 管理员 | 基础实现 | 用户列表和用户管理入口 |
+| `/admin/user-manage` | `AdminUserManagePage.vue` | 用户管理 | 管理员 | 基础实现 | 按工作人员、居民、家属三类查看账号；工作人员可继续区分事项办理和服务预约，并支持管理员新增工作人员 |
 | `/admin/statistics` | `StatisticsDashboardPage.vue` | 统计分析 | 管理员 | 已实现 | 统计总览、事项统计、预约统计图表 |
 | `/service-feedback` | `ServiceFeedbackPage.vue` | 服务评价 | 登录用户 | 基础实现 | 服务反馈入口，完整评价闭环待完善 |
 | `/:pathMatch(.*)*` | - | - | - | 已实现 | 未匹配路由重定向到 `/home` |
@@ -61,7 +61,7 @@
 | `NoticePage.vue`、`NotificationBell.vue` | `api/notice.ts` | 通知列表、未读数、标记已读 |
 | `WorkOrderManagePage.vue`、`StaffWorkbenchPage.vue` | `api/workOrder.ts` | 工单列表、申请详情、填写资料、材料预览/下载、审核、日志 |
 | `AdminServiceConfigPage.vue` | `api/serviceItem.ts` | 后台事项和材料模板管理 |
-| `AdminUserManagePage.vue` | `api/user.ts` | 后台用户管理 |
+| `AdminUserManagePage.vue` | `api/user.ts` | 后台用户分类查询、工作人员创建 |
 | `StatisticsDashboardPage.vue` | `api/statistics.ts` | 后台统计数据 |
 
 ## 当前注意事项

@@ -34,17 +34,20 @@
 |---|---|---|---|
 | `user_id` | `BIGINT` | PK, AUTO_INCREMENT | 用户 ID |
 | `username` | `VARCHAR(50)` | NOT NULL, UNIQUE | 登录用户名 |
+| `account` | `VARCHAR(50)` | UNIQUE | 系统分配账号，如 `SQxxxx` |
 | `password` | `VARCHAR(100)` | NOT NULL | BCrypt 密码哈希 |
 | `phone` | `VARCHAR(20)` | UNIQUE | 手机号 |
 | `email` | `VARCHAR(100)` | | 邮箱 |
+| `avatar` | `VARCHAR(255)` | | 头像文件相对路径 |
 | `status` | `VARCHAR(20)` | NOT NULL, DEFAULT `active` | `active/disabled` |
 | `create_time` | `DATETIME` | NOT NULL | 创建时间 |
 | `update_time` | `DATETIME` | NOT NULL | 更新时间 |
 | `deleted` | `TINYINT` | NOT NULL, DEFAULT 0 | 逻辑删除 |
 | `role` | `VARCHAR(30)` | | `admin/staff/resident/family`，便于基础角色判断 |
+| `staff_type` | `VARCHAR(30)` | | 工作人员业务类型：`application` 处理事项办理工单，`booking` 处理服务预约 |
 | `community_id` | `BIGINT` | | 社区 ID，用于工作人员数据隔离 |
 
-索引：`uk_username`、`uk_phone`、`idx_status`、`idx_user_community_id`。  
+索引：`uk_username`、`uk_account`、`uk_phone`、`idx_status`、`idx_staff_type`、`idx_user_community_id`。
 相关接口：`POST /api/auth/login`、`POST /api/auth/register`、`GET /api/auth/me`。
 
 ---
@@ -301,8 +304,9 @@
 
 | username | role_code | phone | 说明 |
 |---|---|---|---|
-| `admin` | `ROLE_ADMIN` | `13800000000` | 系统管理员 |
-| `staff01` | `ROLE_STAFF` | `13811111111` | 社区工作人员 |
+| `admin` | `ROLE_ADMIN` | - | 代码内置系统管理员，默认账号 `admin` / `123456`，不依赖数据库记录 |
+| `staff01` | `ROLE_STAFF` | `13811111111` | 事项办理工作人员，`staff_type=application` |
+| `booking01` | `ROLE_STAFF` | `13844444444` | 服务预约工作人员，`staff_type=booking` |
 | `resident01` | `ROLE_RESIDENT` | `13822222222` | 居民（已建档，65岁，本地户籍） |
 | `family01` | `ROLE_FAMILY` | `13833333333` | 家属（已绑定 resident01 为被代理人） |
 

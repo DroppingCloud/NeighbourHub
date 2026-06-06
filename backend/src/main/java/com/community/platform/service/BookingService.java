@@ -10,9 +10,13 @@ public interface BookingService {
     BookingVO getDetail(Long userId, Long bookingId);
     void cancel(Long userId, Long bookingId);
     void updateStatus(Long bookingId, String status);
-    void assign(Long operatorId, Long bookingId, Long staffUserId);
+    /**
+     * 工作人员接取预约（claim）：某个工作人员对某个未被接取的预约发起接取请求
+     */
+    void claim(Long staffUserId, Long bookingId);
     void complete(Long staffUserId, Long bookingId, String feedback);
     void feedback(Long userId, Long bookingId, String feedback);
     Page<BookingVO> getStaffList(Long staffUserId, String status, Integer pageNum, Integer pageSize);
+    Page<BookingVO> getStaffList(Long staffUserId, Long targetStaffUserId, String status, Integer pageNum, Integer pageSize);
     void startService(Long staffUserId, Long bookingId);
 }

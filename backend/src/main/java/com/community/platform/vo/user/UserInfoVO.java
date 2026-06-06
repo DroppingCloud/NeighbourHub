@@ -33,4 +33,6 @@ public class UserInfoVO {
 
     private LocalDate birthday;
     private String avatar;
+
+    private String staffType;
 }

@@ -19,25 +19,29 @@ request.interceptors.request.use(
     }
     // 家属代办：如果当前有代办目标，自动添加 _proxyFor 参数
     // 可以通过设置请求头 `X-Skip-Proxy: true` 来跳过该自动添加（用于通知等严格针对登录用户的 API）
+    const authStore = useAuthStore()
     const proxyStore = useProxyStore()
     const skipProxy = config.headers && (config.headers as any)['X-Skip-Proxy'] === 'true'
-    if (proxyStore.currentTarget && !skipProxy) {
-      // 添加到 URL 参数中（GET 请求）或请求体（POST/PUT）
-      if (config.method === 'get') {
-        config.params = { ...config.params, _proxyFor: proxyStore.currentTarget.profileId }
-      } else {
-        // 对于 POST/PUT 等，添加到 data 中（后端需要从请求体解析）
-        if (config.data && typeof config.data === 'object') {
-          config.data._proxyFor = proxyStore.currentTarget.profileId
-        } else {
-          config.data = { _proxyFor: proxyStore.currentTarget.profileId }
-        }
-      }
+    const role = normalizeRole(authStore.userInfo?.role || '')
+    const currentTarget = proxyStore.currentTarget
+    const targetStillValid = !!currentTarget && proxyStore.targets.some(target => target.id === currentTarget.id)
+
+    if (currentTarget && (role !== 'family' || !targetStillValid)) {
+      proxyStore.setCurrentTarget(null)
+    }
+
+    if (role === 'family' && currentTarget && targetStillValid && !skipProxy) {
+      // 后端统一通过 @RequestParam("_proxyFor") 读取代办目标居民档案 ID。
+      config.params = { ...config.params, _proxyFor: currentTarget.profileId }
     }
     return config
   },
   (error) => Promise.reject(error)
 )
+
+function normalizeRole(role: string) {
+  return role.replace(/^ROLE_/, '').toLowerCase()
+}
 
 
 function clearLoginAndRedirect(message: string) {

@@ -5,6 +5,17 @@
       <p>预约助餐、陪诊、上门等社区便民服务</p>
     </div>
 
+    <el-alert
+      v-if="familyNeedsBinding"
+      class="family-blocker"
+      title="请先绑定社区用户"
+      description="家属用户需要先在“家属代办”中提交绑定申请，并由居民确认后，才能代居民预约社区服务。"
+      type="warning"
+      show-icon
+      :closable="false"
+    />
+
+    <template v-else>
     <div class="service-types">
       <div
         v-for="type in serviceTypes"
@@ -47,6 +58,7 @@
         </el-form-item>
       </el-form>
     </div>
+    </template>
   </div>
 </template>
 
@@ -55,9 +67,13 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createBooking } from '@/api/booking'
+import { useAuthStore } from '@/stores/auth'
+import { useProxyStore } from '@/stores/proxy'
 
 type ServiceType = 'dining' | 'accompany' | 'home_visit'
 const route = useRoute()
+const authStore = useAuthStore()
+const proxyStore = useProxyStore()
 
 const serviceTypes = [
   { value: 'dining' as const, label: '助餐服务', desc: '社区食堂配送到家' },
@@ -75,6 +91,8 @@ const bookingForm = ref({
 })
 
 const getServiceTypeName = computed(() => serviceTypes.find(t => t.value === selectedType.value)?.label || '')
+const isFamily = computed(() => normalizeRole(authStore.userInfo?.role || '') === 'family')
+const familyNeedsBinding = computed(() => isFamily.value && !proxyStore.currentTarget)
 
 const formRules = {
   expectTime: [{ required: true, message: '请选择预约时间', trigger: 'change' }],
@@ -82,6 +100,10 @@ const formRules = {
 }
 
 async function submitBooking() {
+  if (familyNeedsBinding.value) {
+    ElMessage.warning('请先绑定社区用户后再代办预约')
+    return
+  }
   await formRef.value?.validate(async (valid: boolean) => {
     if (!valid) return
     submitting.value = true
@@ -101,11 +123,20 @@ async function submitBooking() {
 }
 
 onMounted(() => {
+  if (isFamily.value) {
+    proxyStore.restoreTarget()
+  } else {
+    proxyStore.clearTarget()
+  }
   const queryType = String(route.query.serviceType || '')
   if (serviceTypes.some(type => type.value === queryType)) {
     selectedType.value = queryType as ServiceType
   }
 })
+
+function normalizeRole(role: string) {
+  return role.replace(/^ROLE_/, '').toLowerCase()
+}
 </script>
 
 <style scoped>
@@ -198,5 +229,9 @@ onMounted(() => {
 .submit-btn {
   width: 100%;
   min-height: 2.75rem;
+}
+
+.family-blocker {
+  margin-bottom: 1.5rem;
 }
 </style>

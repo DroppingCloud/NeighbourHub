@@ -39,7 +39,10 @@
           </div>
           <div class="info-row">
             <span class="label">代办申请</span>
-            <span>{{ app.isProxy ? '是' : '否' }}</span>
+            <span>
+              <el-tag v-if="app.isProxy" type="info" size="small">代他人办理</el-tag>
+              <span v-else>否</span>
+            </span>
           </div>
           <div v-if="app.materialCompleteness" class="info-row">
             <span class="label">材料状态</span>
@@ -106,7 +109,10 @@
               </div>
               <div class="detail-item">
                 <span class="detail-label">代办申请</span>
-                <span>{{ currentApplication.isProxy ? '是' : '否' }}</span>
+                <span>
+                  <el-tag v-if="currentApplication.isProxy" type="info" size="small">代他人办理</el-tag>
+                  <span v-else>否</span>
+                </span>
               </div>
               <div class="detail-item detail-item-wide">
                 <span class="detail-label">办理备注</span>

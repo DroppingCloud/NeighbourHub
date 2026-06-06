@@ -199,6 +199,19 @@ router.beforeEach((to, _from, next) => {
     }
   }
 
+  const normalizedUserRole = normalizeRole(authStore.userInfo?.role)
+  const staffType = authStore.userInfo?.staffType || ''
+  if (normalizedUserRole === 'ROLE_STAFF') {
+    if (to.path === '/workorder' && staffType === 'booking') {
+      next('/staff/booking')
+      return
+    }
+    if (to.path === '/staff/booking' && staffType === 'application') {
+      next('/workorder')
+      return
+    }
+  }
+
   next()
 })
 

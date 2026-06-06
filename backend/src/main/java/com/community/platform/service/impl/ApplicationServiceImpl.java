@@ -70,17 +70,15 @@ public class ApplicationServiceImpl implements ApplicationService {
     @Override
     @Transactional
     public Long submit(Long userId, ApplicationSubmitDTO dto) {
-        // 代办权限校验
-        if (dto.getProxyFor() != null) {
-            proxyPermissionService.validateProxyPermission(userId, dto.getProxyFor(), "apply");
-        }
-
         ServiceItem item = requireOnlineItem(dto.getItemId());
+        Long ownerUserId = proxyPermissionService.validateAndGetTargetUserId(userId, dto.getProxyFor(), "apply");
+        Long proxyUserId = dto.getProxyFor() == null ? null : userId;
 
         ApplicationForm application = new ApplicationForm();
-        application.setUserId(userId);
+        application.setUserId(ownerUserId);
+        application.setProfileId(dto.getProxyFor());
         application.setItemId(dto.getItemId());
-        application.setProxyUserId(dto.getProxyUserId());
+        application.setProxyUserId(proxyUserId);
         application.setStatus("pending");
         application.setFormData(toJson(dto.getFormData()));
         application.setRemark(dto.getRemark());
@@ -98,15 +96,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         // 自动分配工作人员
         workOrderService.assign(order.getOrderId());
 
-        if (dto.getProxyFor() != null) {
-            application.setProxyUserId(dto.getProxyFor());  // 被代理人
-        } else {
-            application.setProxyUserId(null);
-        }
-        application.setUserId(userId);  // 当前操作人（家属或本人）
-
         noticeService.sendNotice(
-                userId,
+                ownerUserId,
                 "申请已提交",
                 "您的“" + item.getItemName() + "”申请已提交，等待工作人员审核。",
                 "system",
@@ -119,9 +110,9 @@ public class ApplicationServiceImpl implements ApplicationService {
     public Page<ApplicationVO> getList(Long userId, ApplicationQueryDTO query, Long proxyFor) {
         LambdaQueryWrapper<ApplicationForm> wrapper = new LambdaQueryWrapper<>();
         if (proxyFor != null) {
-            // 校验代理权限
-            proxyPermissionService.validateProxyPermission(userId, proxyFor, "query");
-            wrapper.eq(ApplicationForm::getProxyUserId, proxyFor);
+            Long targetUserId = proxyPermissionService.validateAndGetTargetUserId(userId, proxyFor, "query");
+            wrapper.eq(ApplicationForm::getUserId, targetUserId)
+                    .eq(ApplicationForm::getProxyUserId, userId);
         } else {
             wrapper.and(w -> w.eq(ApplicationForm::getUserId, userId)
                              .or().eq(ApplicationForm::getProxyUserId, userId));

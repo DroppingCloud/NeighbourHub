@@ -25,6 +25,7 @@ import com.community.platform.mapper.WorkOrderMapper;
 import com.community.platform.service.ApplicationMaterialService;
 import com.community.platform.service.ApplicationService;
 import com.community.platform.service.NoticeService;
+import com.community.platform.service.StaffDispatchService;
 import com.community.platform.service.WorkOrderService;
 import com.community.platform.common.utils.SecurityUtils;
 import com.community.platform.vo.application.ApplicationVO;
@@ -36,11 +37,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.springframework.context.annotation.Lazy;
 
 @Service
@@ -58,6 +57,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final ApplicationMaterialService applicationMaterialService;
     private final NoticeService noticeService;
     private final ApplicationService applicationService;
+    private final StaffDispatchService staffDispatchService;
 
     // 显式构造器，在 ApplicationService 参数上添加 @Lazy
     public WorkOrderServiceImpl(WorkOrderMapper workOrderMapper,
@@ -69,6 +69,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                                  UserMapper userMapper,
                                 ApplicationMaterialService applicationMaterialService,
                                 NoticeService noticeService,
+                                StaffDispatchService staffDispatchService,
                                 @Lazy ApplicationService applicationService) {
         this.workOrderMapper = workOrderMapper;
         this.workOrderLogMapper = workOrderLogMapper;
@@ -79,6 +80,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         this.userMapper = userMapper;
         this.applicationMaterialService = applicationMaterialService;
         this.noticeService = noticeService;
+        this.staffDispatchService = staffDispatchService;
         this.applicationService = applicationService;
     }
 
@@ -95,16 +97,26 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             wrapper.in(WorkOrder::getStatus, List.of("pending", "processing"));
         }
 
-        wrapper.eq(query.getStaffUserId() != null, WorkOrder::getStaffUserId, query.getStaffUserId())
-               .orderByDesc(WorkOrder::getCreateTime);
+        wrapper.orderByDesc(WorkOrder::getCreateTime);
 
-        // 社区数据隔离 - 工作人员只能看到本社区的工单
+        // 工作人员端只展示分配给自己的工单；管理员可查看全部或按 staffUserId 筛选。
         Long currentUserId = SecurityUtils.getCurrentUserId();
         if (currentUserId != null) {
             User currentUser = userMapper.selectById(currentUserId);
-            if (currentUser != null && "staff".equals(currentUser.getRole()) && currentUser.getCommunityId() != null) {
-                wrapper.eq(WorkOrder::getCommunityId, currentUser.getCommunityId());
+            if (currentUser != null && "staff".equals(currentUser.getRole())) {
+                if (!"application".equals(currentUser.getStaffType())) {
+                    wrapper.eq(WorkOrder::getStaffUserId, -1L);
+                } else {
+                wrapper.eq(WorkOrder::getStaffUserId, currentUserId);
+                if (currentUser.getCommunityId() != null) {
+                    wrapper.eq(WorkOrder::getCommunityId, currentUser.getCommunityId());
+                }
+                }
+            } else if (query.getStaffUserId() != null) {
+                wrapper.eq(WorkOrder::getStaffUserId, query.getStaffUserId());
             }
+        } else if (query.getStaffUserId() != null) {
+            wrapper.eq(WorkOrder::getStaffUserId, query.getStaffUserId());
         }
 
         Page<WorkOrder> page = workOrderMapper.selectPage(new Page<>(page(query.getPageNum()), size(query.getPageSize())), wrapper);
@@ -115,7 +127,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     @Override
     public WorkOrderVO getDetail(Long orderId) {
-        return toWorkOrderVO(requireOrder(orderId));
+        WorkOrder order = requireOrder(orderId);
+        assertCanViewOrder(order);
+        return toWorkOrderVO(order);
     }
 
     @Override
@@ -155,9 +169,16 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         // 3. 社区权限校验：工作人员只能处理本社区工单
         User staff = userMapper.selectById(staffUserId);
+        if (staff != null && "staff".equals(staff.getRole()) && !"application".equals(staff.getStaffType())) {
+            throw new BusinessException(ResultCode.NO_PERMISSION, "服务预约工作人员不能处理事项办理工单");
+        }
         if (staff != null && "staff".equals(staff.getRole()) && staff.getCommunityId() != null 
                 && order.getCommunityId() != null && !staff.getCommunityId().equals(order.getCommunityId())) {
             throw new BusinessException(ResultCode.NO_PERMISSION, "您无权处理其他社区的工单");
+        }
+        if (staff != null && "staff".equals(staff.getRole())
+                && !staffUserId.equals(order.getStaffUserId())) {
+            throw new BusinessException(ResultCode.NO_PERMISSION, "只能处理分配给自己的工单");
         }
 
         String auditOpinion = dto.getOpinion();
@@ -218,7 +239,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     @Override
     public List<WorkOrderLog> getLogs(Long orderId) {
-        requireOrder(orderId);
+        WorkOrder order = requireOrder(orderId);
+        assertCanViewOrder(order);
         return workOrderLogMapper.selectList(new LambdaQueryWrapper<WorkOrderLog>()
                 .eq(WorkOrderLog::getOrderId, orderId)
                 .orderByAsc(WorkOrderLog::getCreateTime)
@@ -232,6 +254,18 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         if (currentUserId != null) {
             User currentUser = userMapper.selectById(currentUserId);
             if (currentUser != null && "staff".equals(currentUser.getRole())) {
+                if (!"application".equals(currentUser.getStaffType())) {
+                    return Map.of(
+                            "pending", 0L,
+                            "processing", 0L,
+                            "approved", 0L,
+                            "supplementRequired", 0L,
+                            "completed", 0L,
+                            "rejected", 0L,
+                            "active", 0L,
+                            "total", 0L
+                    );
+                }
                 communityId = currentUser.getCommunityId();
             }
         }
@@ -265,59 +299,29 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             return; // 已分配
         }
         
-        // 方案一：工单没有社区信息时，从所有工作人员中选择（不按社区筛选）
         Long targetCommunityId = order.getCommunityId();
-        List<User> staffList;
-        
-        if (targetCommunityId == null) {
-            // 无社区信息：查询所有工作人员
-            staffList = userMapper.selectList(new LambdaQueryWrapper<User>()
-                    .eq(User::getRole, "staff"));
-            if (staffList.isEmpty()) {
-                throw new BusinessException(ResultCode.BAD_REQUEST, "暂无工作人员，请联系管理员");
-            }
-        } else {
-            // 有社区信息：按社区查询工作人员
-            staffList = userMapper.selectList(new LambdaQueryWrapper<User>()
-                    .eq(User::getRole, "staff")
-                    .eq(User::getCommunityId, targetCommunityId));
-            if (staffList.isEmpty()) {
-                throw new BusinessException(ResultCode.BAD_REQUEST, "该社区暂无工作人员，请联系管理员");
-            }
+        User assignee = staffDispatchService.selectBestStaff(targetCommunityId, null, targetCommunityId == null, "application");
+        if (assignee == null) {
+            String message = targetCommunityId == null
+                    ? "暂无可分配的工作人员，请联系管理员"
+                    : "该社区暂无可分配的工作人员，请联系管理员";
+            throw new BusinessException(ResultCode.BAD_REQUEST, message);
         }
         
-        // 计算每个工作人员的待处理工单数量
-        Map<Long, Long> workload = staffList.stream().collect(Collectors.toMap(
-                User::getUserId,
-                u -> workOrderMapper.selectCount(new LambdaQueryWrapper<WorkOrder>()
-                        .eq(WorkOrder::getStaffUserId, u.getUserId())
-                        .in(WorkOrder::getStatus, List.of("pending", "processing")))
-        ));
-        
-        // 按工作量最少选择工作人员
-        Long assigneeId = staffList.stream()
-                .min(Comparator.comparingLong(u -> workload.getOrDefault(u.getUserId(), 0L)))
-                .map(User::getUserId)
-                .orElse(null);
-        
-        if (assigneeId == null) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "无法找到合适的工作人员");
-        }
-        
-        order.setStaffUserId(assigneeId);
+        order.setStaffUserId(assignee.getUserId());
         workOrderMapper.updateById(order);
         
         // 记录分配日志
         WorkOrderLog log = new WorkOrderLog();
         log.setOrderId(orderId);
-        log.setOperatorId(assigneeId);
+        log.setOperatorId(assignee.getUserId());
         log.setAction("assign");
         log.setFromStatus("pending");
         log.setToStatus("pending");
         if (targetCommunityId == null) {
-            log.setRemark("自动分配工作人员（工单无社区信息，从全体工作人员中分配）");
+            log.setRemark("自动分配工作人员：" + assignee.getUsername() + "（工单无社区信息，按综合负载分配）");
         } else {
-            log.setRemark("自动分配工作人员（社区ID: " + targetCommunityId + "）");
+            log.setRemark("自动分配工作人员：" + assignee.getUsername() + "（社区ID: " + targetCommunityId + "，按综合负载分配）");
         }
         workOrderLogMapper.insert(log);
     }
@@ -338,11 +342,13 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             // 无社区信息：从所有工作人员中排除当前人员
             otherStaff = userMapper.selectList(new LambdaQueryWrapper<User>()
                     .eq(User::getRole, "staff")
+                    .eq(User::getStaffType, "application")
                     .ne(oldStaffId != null, User::getUserId, oldStaffId));
         } else {
             // 有社区信息：从同社区工作人员中排除当前人员
             otherStaff = userMapper.selectList(new LambdaQueryWrapper<User>()
                     .eq(User::getRole, "staff")
+                    .eq(User::getStaffType, "application")
                     .eq(User::getCommunityId, targetCommunityId)
                     .ne(oldStaffId != null, User::getUserId, oldStaffId));
         }
@@ -359,13 +365,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             return;
         }
         
-        // 按工作量最少选择
-        User newStaff = otherStaff.stream()
-                .min(Comparator.comparingLong(u -> workOrderMapper.selectCount(
-                        new LambdaQueryWrapper<WorkOrder>()
-                                .eq(WorkOrder::getStaffUserId, u.getUserId())
-                                .in(WorkOrder::getStatus, List.of("pending", "processing")))))
-                .orElse(otherStaff.get(0));
+        User newStaff = staffDispatchService.selectBestStaff(targetCommunityId, oldStaffId, targetCommunityId == null, "application");
+        if (newStaff == null) {
+            newStaff = otherStaff.get(0);
+        }
         
         order.setStaffUserId(newStaff.getUserId());
         workOrderMapper.updateById(order);
@@ -413,6 +416,27 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             throw new BusinessException(ResultCode.WORK_ORDER_NOT_EXISTS);
         }
         return order;
+    }
+
+    private void assertCanViewOrder(WorkOrder order) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        if (currentUserId == null) {
+            return;
+        }
+        User currentUser = userMapper.selectById(currentUserId);
+        if (currentUser != null && "staff".equals(currentUser.getRole())) {
+            if (!"application".equals(currentUser.getStaffType())) {
+                throw new BusinessException(ResultCode.NO_PERMISSION, "服务预约工作人员不能查看事项办理工单");
+            }
+            if (order.getStaffUserId() == null || !order.getStaffUserId().equals(currentUserId)) {
+                throw new BusinessException(ResultCode.NO_PERMISSION, "只能查看分配给自己的工单");
+            }
+            if (currentUser.getCommunityId() != null
+                    && order.getCommunityId() != null
+                    && !currentUser.getCommunityId().equals(order.getCommunityId())) {
+                throw new BusinessException(ResultCode.NO_PERMISSION, "无权查看其他社区的工单");
+            }
+        }
     }
 
     private String calculateTargetStatus(String action) {
@@ -527,6 +551,17 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .eq(WorkOrder::getStatus, status);
         if (communityId != null) {
             wrapper.eq(WorkOrder::getCommunityId, communityId);
+        }
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        if (currentUserId != null) {
+            User currentUser = userMapper.selectById(currentUserId);
+            if (currentUser != null && "staff".equals(currentUser.getRole())) {
+                if (!"application".equals(currentUser.getStaffType())) {
+                    wrapper.eq(WorkOrder::getStaffUserId, -1L);
+                    return workOrderMapper.selectCount(wrapper);
+                }
+                wrapper.eq(WorkOrder::getStaffUserId, currentUserId);
+            }
         }
         return workOrderMapper.selectCount(wrapper);
     }

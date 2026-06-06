@@ -47,14 +47,15 @@
           <el-icon><House /></el-icon>
           <span>工作台</span>
         </el-menu-item>
-        <el-menu-item index="/workorder">
+        <el-menu-item v-if="isApplicationStaff" index="/workorder">
           <el-icon><Tickets /></el-icon>
           <span>工单处理</span>
           <el-badge v-if="pendingCount > 0" :value="pendingCount" class="menu-badge-right" />
         </el-menu-item>
-        <el-menu-item index="/staff/booking">
+        <el-menu-item v-if="isBookingStaff" index="/staff/booking">
           <el-icon><Calendar /></el-icon>
           <span>服务调度</span>
+          <el-badge v-if="bookingPendingCount > 0" :value="bookingPendingCount" class="menu-badge-right" />
         </el-menu-item>
       </template>
 
@@ -104,14 +105,19 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notification'
 import { getWorkOrderList } from '@/api/workOrder'
+import { getStaffBookingList } from '@/api/booking'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const notificationStore = useNotificationStore()
 const pendingCount = ref(0)
+const bookingPendingCount = ref(0)
 
 const role = computed(() => normalizeRole(authStore.userInfo?.role || 'resident'))
+const staffType = computed(() => authStore.userInfo?.staffType || '')
+const isApplicationStaff = computed(() => role.value === 'staff' && staffType.value === 'application')
+const isBookingStaff = computed(() => role.value === 'staff' && staffType.value === 'booking')
 const activeMenu = computed(() => route.path)
 const unreadCount = computed(() => notificationStore.unreadCount)
 
@@ -139,7 +145,7 @@ function normalizeRole(value: string) {
 }
 
 async function loadPendingWorkOrderCount() {
-  if (role.value !== 'staff') {
+  if (!isApplicationStaff.value) {
     pendingCount.value = 0
     return
   }
@@ -152,9 +158,24 @@ async function loadPendingWorkOrderCount() {
   }
 }
 
+async function loadPendingBookingCount() {
+  if (!isBookingStaff.value) {
+    bookingPendingCount.value = 0
+    return
+  }
+
+  try {
+    const page = await getStaffBookingList(1, 1, 'pending')
+    bookingPendingCount.value = page?.total ?? page?.records?.length ?? 0
+  } catch {
+    bookingPendingCount.value = 0
+  }
+}
+
 onMounted(() => {
   notificationStore.loadNotifications()
   loadPendingWorkOrderCount()
+  loadPendingBookingCount()
 })
 
 </script>

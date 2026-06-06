@@ -111,6 +111,7 @@ const form = reactive(getEmptyForm())
 
 const avatarSrc = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
+const currentRole = ref(authStore.userInfo?.role || 'resident')
 // 保存当前预览的 objectURL，用于清理
 let currentObjectUrl: string | null = null
 
@@ -121,11 +122,11 @@ const stats = reactive({
   completed: 0
 })
 
-const role = computed(() => normalizeRole(authStore.userInfo?.role || 'resident'))
+const role = computed(() => normalizeRole(currentRole.value || 'resident'))
 const roleText = computed(() => {
   const map: Record<string, string> = {
     resident: '居民用户',
-    family: '家属代办',
+    family: '家属用户',
     staff: '工作人员',
     admin: '管理员'
   }
@@ -139,6 +140,7 @@ onMounted(async () => {
     // 保存最新成功加载的数据
     savedData.value = { ...me }
     fillForm(me)
+    syncRoleFromMe(me)
     updateAvatarDisplay(me)
     await loadStats()
   } finally {
@@ -207,6 +209,7 @@ async function saveProfile() {
     const refreshed = await getMe()
     savedData.value = { ...refreshed }
     fillForm(refreshed)
+    syncRoleFromMe(refreshed)
     updateAvatarDisplay(refreshed)
     
     // 清除临时 objectURL
@@ -218,7 +221,7 @@ async function saveProfile() {
     if (fileInput.value) fileInput.value.value = ''
     
     // 更新 store 中的用户信息
-    authStore.setUserInfo(authStore.userInfo ? { ...authStore.userInfo, realName: form.realName, avatar: avatarSrc.value } : authStore.userInfo)
+    authStore.setUserInfo(authStore.userInfo ? { ...authStore.userInfo, realName: form.realName, role: currentRole.value, avatar: avatarSrc.value } : authStore.userInfo)
     
     ElMessage.success('个人信息已保存')
   } catch (error) {
@@ -313,6 +316,7 @@ async function onFileChange(e: Event) {
     // 上传成功后刷新用户信息，更新 savedData
     const refreshed = await getMe()
     savedData.value = { ...refreshed }
+    syncRoleFromMe(refreshed)
     updateAvatarDisplay(refreshed)
     
     // 清理临时 objectURL
@@ -340,6 +344,19 @@ function pageRows<T>(page: any): T[] {
 
 function pageTotal(page: any, fallback: number) {
   return Number(page?.total ?? fallback)
+}
+
+function syncRoleFromMe(me: UserInfoVO) {
+  const roleFromApi = me.roles?.[0] ? normalizeRole(me.roles[0]) : currentRole.value
+  currentRole.value = roleFromApi || 'resident'
+  if (authStore.userInfo) {
+    authStore.setUserInfo({
+      ...authStore.userInfo,
+      role: currentRole.value,
+      realName: me.realName || authStore.userInfo.realName,
+      avatar: avatarSrc.value || authStore.userInfo.avatar
+    })
+  }
 }
 
 function normalizeRole(value: string) {

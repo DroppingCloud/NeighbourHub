@@ -53,6 +53,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+    private static final Long BUILT_IN_ADMIN_ID = 0L;
+    private static final String BUILT_IN_ADMIN_USERNAME = "admin";
+    private static final String BUILT_IN_ADMIN_PASSWORD = "123456";
+
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
     private final ResidentProfileMapper residentProfileMapper;
@@ -68,6 +72,20 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginVO login(LoginDTO dto) {
+        if (BUILT_IN_ADMIN_USERNAME.equals(dto.getUsername())) {
+            if (!BUILT_IN_ADMIN_PASSWORD.equals(dto.getPassword())) {
+                throw new BusinessException(ResultCode.PASSWORD_ERROR);
+            }
+            List<String> roles = List.of("ROLE_ADMIN");
+            String token = jwtUtil.generateToken(BUILT_IN_ADMIN_ID, BUILT_IN_ADMIN_USERNAME, roles);
+            LoginVO vo = new LoginVO();
+            vo.setToken(token);
+            vo.setUserId(BUILT_IN_ADMIN_ID);
+            vo.setUsername(BUILT_IN_ADMIN_USERNAME);
+            vo.setRoles(roles);
+            return vo;
+        }
+
         User user = userMapper.selectOne(
             new LambdaQueryWrapper<User>().eq(User::getUsername, dto.getUsername()));
         // if not found by username, try phone
@@ -101,6 +119,7 @@ public class AuthServiceImpl implements AuthService {
         vo.setUserId(user.getUserId());
         vo.setUsername(user.getUsername());
         vo.setRoles(roles);
+        vo.setStaffType(user.getStaffType());
         return vo;
     }
 
@@ -122,6 +141,7 @@ public class AuthServiceImpl implements AuthService {
         vo.setUserId(user.getUserId());
         vo.setUsername(user.getUsername());
         vo.setRoles(roles);
+        vo.setStaffType(user.getStaffType());
         return vo;
     }
 
@@ -155,28 +175,18 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setPhone(dto.getPhone());
         user.setStatus("active");
-        String userRoleSimple = "resident";
+        String requestedRole = dto.getRole() == null || dto.getRole().isBlank()
+                ? "resident"
+                : dto.getRole().trim().toLowerCase();
+        if (!"resident".equals(requestedRole) && !"family".equals(requestedRole)) {
+            throw new BusinessException(ResultCode.BAD_REQUEST, "公开注册仅支持居民用户或家属用户");
+        }
+        String userRoleSimple = requestedRole;
         userMapper.insert(user);
 
         UserRole role = new UserRole();
         role.setUserId(user.getUserId());
-        String roleCode = "ROLE_RESIDENT";
-        if (dto.getRole() != null) {
-            String r = dto.getRole().toLowerCase();
-            switch (r) {
-                case "staff":
-                    roleCode = "ROLE_STAFF";
-                    userRoleSimple = "staff";
-                    break;
-                case "admin":
-                    roleCode = "ROLE_ADMIN";
-                    userRoleSimple = "admin";
-                    break;
-                default:
-                    roleCode = "ROLE_RESIDENT";
-                    userRoleSimple = "resident";
-            }
-        }
+        String roleCode = "family".equals(requestedRole) ? "ROLE_FAMILY" : "ROLE_RESIDENT";
         role.setRoleCode(roleCode);
         userRoleMapper.insert(role);
 
@@ -206,6 +216,15 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public UserInfoVO getMe(Long userId) {
+        if (BUILT_IN_ADMIN_ID.equals(userId)) {
+            UserInfoVO vo = new UserInfoVO();
+            vo.setUserId(BUILT_IN_ADMIN_ID);
+            vo.setUsername(BUILT_IN_ADMIN_USERNAME);
+            vo.setRealName("系统管理员");
+            vo.setRoles(List.of("ROLE_ADMIN"));
+            return vo;
+        }
+
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.ACCOUNT_NOT_EXISTS);
@@ -224,6 +243,7 @@ public class AuthServiceImpl implements AuthService {
         vo.setPhone(user.getPhone());
         vo.setEmail(user.getEmail());
         vo.setRoles(roles);
+        vo.setStaffType(user.getStaffType());
         if (profile != null) {
             vo.setRealName(profile.getRealName());
             vo.setIdCard(profile.getIdCard());
@@ -304,9 +324,10 @@ public class AuthServiceImpl implements AuthService {
         }
         Path path = Paths.get(user.getAvatar()).toAbsolutePath().normalize();
         try {
-            return new UrlResource(path.toUri());
+            Resource resource = new UrlResource(path.toUri());
+            return resource.exists() && resource.isReadable() ? resource : null;
         } catch (Exception e) {
-            throw new BusinessException(ResultCode.NOT_FOUND, "头像不存在");
+            return null;
         }
     }
 

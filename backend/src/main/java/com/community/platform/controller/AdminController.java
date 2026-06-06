@@ -2,6 +2,7 @@ package com.community.platform.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.community.platform.common.Result;
+import com.community.platform.dto.admin.StaffCreateDTO;
 import com.community.platform.entity.ServiceItem;
 import com.community.platform.entity.ServiceMaterialTemplate;
 import com.community.platform.service.AdminUserService;
@@ -9,6 +10,7 @@ import com.community.platform.service.ServiceItemService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -96,5 +98,11 @@ public class AdminController {
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
         return Result.success(adminUserService.getUserList(role, pageNum, pageSize));
+    }
+
+    @Operation(summary = "新增工作人员账号")
+    @PostMapping("/staff")
+    public Result<Long> createStaff(@Valid @RequestBody StaffCreateDTO dto) {
+        return Result.success(adminUserService.createStaff(dto));
     }
 }

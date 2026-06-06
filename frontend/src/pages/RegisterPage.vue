@@ -136,11 +136,11 @@
           </el-form-item>
 
           <el-form-item label="选择身份" prop="role">
-            <el-radio-group v-model="form.role">
-              <el-radio label="resident">居民</el-radio>
-              <el-radio label="staff">工作人员</el-radio>
-              <el-radio label="admin">管理员</el-radio>
+            <el-radio-group v-model="form.role" class="role-radio-group">
+              <el-radio value="resident" border>居民用户</el-radio>
+              <el-radio value="family" border>家属用户</el-radio>
             </el-radio-group>
+            <div class="role-tip">{{ roleTip }}</div>
           </el-form-item>
 
           <div class="pwd-strength" v-if="form.password">
@@ -213,13 +213,15 @@ const showConfirmPwd = ref(false)
 const step1FormRef = ref<FormInstance>()
 const step2FormRef = ref<FormInstance>()
 
+type RegisterRole = 'resident' | 'family'
+
 const form = ref({
   phone: '',
   code: '',
   username: '',
   password: '',
   confirmPassword: '',
-  role: 'resident',
+  role: 'resident' as RegisterRole,
   realName: '',
   idCard: ''
 })
@@ -236,6 +238,11 @@ const pwdStrength = computed(() => {
 
 const strengthText = computed(() => ['', '较弱', '一般', '强'][pwdStrength.value])
 const strengthClass = computed(() => ['', 'text-weak', 'text-medium', 'text-strong'][pwdStrength.value])
+const roleTip = computed(() => {
+  return form.value.role === 'family'
+    ? '家属用户可在登录后发起家属绑定申请，待居民确认后进行代办。'
+    : '居民用户可办理本人事项、预约服务，并确认家属绑定申请。'
+})
 
 const step1Rules: FormRules = {
   phone: [
@@ -282,9 +289,7 @@ const step2Rules: FormRules = {
 }
 
 // import API
-import { register, login } from '@/api/auth'
-import { useAuthStore } from '@/stores/auth'
-const authStore = useAuthStore()
+import { register } from '@/api/auth'
 
 function sendCode() {
   if (!/^1[3-9]\d{9}$/.test(form.value.phone)) {
@@ -481,6 +486,19 @@ function goLogin() {
 .account-card-tip {
   font-size: 0.6875rem;
   color: rgba(255,255,255,0.4);
+}
+
+.role-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.role-tip {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
 }
 
 .pwd-strength {

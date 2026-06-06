@@ -197,8 +197,9 @@ const currentStreamingIndex = ref<number | null>(null)
 const authStore = useAuthStore()
 const userAvatarSrc = computed(() => {
   const base = import.meta.env.VITE_API_BASE_URL ?? ''
-  const uid = (authStore.userInfo as any)?.userId
-  if (!uid) return ''
+  const userInfo = authStore.userInfo as any
+  const uid = userInfo?.userId
+  if (!uid || !userInfo?.avatar) return ''
   return (base || '') + `/api/auth/avatar/${uid}`
 })
 

@@ -6,7 +6,7 @@
     </div>
 
     <div class="stats-row">
-      <div class="stat-card" @click="goTo('/workorder', 'pending')">
+      <div v-if="isApplicationStaff" class="stat-card" @click="goTo('/workorder', 'pending')">
         <div class="stat-icon warning"><el-icon><Tickets /></el-icon></div>
         <div class="stat-info">
           <div class="stat-value">{{ pendingWorkOrders }}</div>
@@ -14,7 +14,7 @@
           <div class="stat-trend">需及时处理</div>
         </div>
       </div>
-      <div class="stat-card" @click="goTo('/workorder', 'processing')">
+      <div v-if="isApplicationStaff" class="stat-card" @click="goTo('/workorder', 'processing')">
         <div class="stat-icon primary"><el-icon><Loading /></el-icon></div>
         <div class="stat-info">
           <div class="stat-value">{{ processingWorkOrders }}</div>
@@ -22,7 +22,7 @@
           <div class="stat-trend">进行中</div>
         </div>
       </div>
-      <div class="stat-card" @click="goTo('/staff/booking', 'pending')">
+      <div v-if="isBookingStaff" class="stat-card" @click="goTo('/staff/booking', 'pending')">
         <div class="stat-icon info"><el-icon><Calendar /></el-icon></div>
         <div class="stat-info">
           <div class="stat-value">{{ pendingDispatches }}</div>
@@ -30,7 +30,7 @@
           <div class="stat-trend">需派单</div>
         </div>
       </div>
-      <div class="stat-card" @click="goTo('/staff/booking', 'processing')">
+      <div v-if="isBookingStaff" class="stat-card" @click="goTo('/staff/booking', 'in_progress')">
         <div class="stat-icon success"><el-icon><Check /></el-icon></div>
         <div class="stat-info">
           <div class="stat-value">{{ processingServices }}</div>
@@ -43,12 +43,12 @@
     <div class="quick-actions-section">
       <h3 class="section-title">快捷操作</h3>
       <div class="action-grid">
-        <div class="action-card" @click="goTo('/workorder', 'pending')">
+        <div v-if="isApplicationStaff" class="action-card" @click="goTo('/workorder', 'pending')">
           <div class="action-icon warning"><el-icon><Tickets /></el-icon></div>
           <span>工单审核</span>
           <span class="action-badge" v-if="pendingWorkOrders > 0">{{ pendingWorkOrders }}</span>
         </div>
-        <div class="action-card" @click="goTo('/staff/booking', 'pending')">
+        <div v-if="isBookingStaff" class="action-card" @click="goTo('/staff/booking', 'pending')">
           <div class="action-icon info"><el-icon><Position /></el-icon></div>
           <span>服务派单</span>
           <span class="action-badge" v-if="pendingDispatches > 0">{{ pendingDispatches }}</span>
@@ -64,7 +64,7 @@
       </div>
     </div>
 
-    <div class="recent-section">
+    <div v-if="isApplicationStaff" class="recent-section">
       <div class="section-header">
         <h3 class="section-title">待处理工单</h3>
         <router-link to="/workorder" class="view-all">查看全部 &gt;</router-link>
@@ -83,7 +83,7 @@
       <el-empty v-if="!loading && recentWorkOrders.length === 0" description="暂无待处理工单" />
     </div>
 
-    <div class="recent-section">
+    <div v-if="isBookingStaff" class="recent-section">
       <div class="section-header">
         <h3 class="section-title">待调度预约</h3>
         <router-link to="/staff/booking" class="view-all">查看全部 &gt;</router-link>
@@ -94,7 +94,7 @@
         <el-table-column prop="expectTime" label="预约时间" width="180" />
         <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="quickDispatch(row)">派单</el-button>
+            <el-button type="primary" size="small" @click="quickDispatch(row)">接取</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -110,13 +110,15 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tickets, Loading, Calendar, Check, Position, Bell, Setting } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getWorkOrderList, auditWorkOrder, type WorkOrderVO } from '@/api/workOrder'
-import { assignBooking, type BookingVO } from '@/api/booking'
-import { getStaffBookingList } from '@/api/booking'
+import { assignBooking, type BookingVO, getStaffBookingList } from '@/api/booking'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const userInfo = computed(() => authStore.userInfo)
+const staffType = computed(() => authStore.userInfo?.staffType || 'application')
+const isApplicationStaff = computed(() => staffType.value === 'application')
+const isBookingStaff = computed(() => staffType.value === 'booking')
 const workOrders = ref<WorkOrderVO[]>([])
 const bookings = ref<BookingVO[]>([])
 const loading = ref(false)
@@ -124,7 +126,7 @@ const loading = ref(false)
 const pendingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').length)
 const processingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'processing').length)
 const pendingDispatches = computed(() => bookings.value.filter(b => b.status === 'pending').length)
-const processingServices = computed(() => bookings.value.filter(b => b.status === 'processing').length)
+const processingServices = computed(() => bookings.value.filter(b => b.status === 'in_progress').length)
 const recentWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').slice(0, 5))
 const recentBookings = computed(() => bookings.value.filter(b => b.status === 'pending').slice(0, 5))
 
@@ -135,12 +137,15 @@ onMounted(() => {
 async function loadWorkbench() {
   loading.value = true
   try {
-    const [workOrderPage, bookingPage] = await Promise.all([
-      getWorkOrderList({ pageNum: 1, pageSize: 50 }),
-      getStaffBookingList(1, 100)
-    ])
-    workOrders.value = getRows<WorkOrderVO>(workOrderPage)
-    bookings.value = getRows<BookingVO>(bookingPage)
+    if (isApplicationStaff.value) {
+      const workOrderPage = await getWorkOrderList({ pageNum: 1, pageSize: 50 })
+      workOrders.value = getRows<WorkOrderVO>(workOrderPage)
+      bookings.value = []
+    } else if (isBookingStaff.value) {
+      const bookingPage = await getStaffBookingList(1, 100)
+      bookings.value = getRows<BookingVO>(bookingPage)
+      workOrders.value = []
+    }
   } finally {
     loading.value = false
   }
@@ -181,8 +186,8 @@ function quickReject(order: WorkOrderVO) {
 
 async function quickDispatch(booking: BookingVO) {
   try {
-    await assignBooking(booking.bookingId, Number(authStore.userInfo?.userId || 2))
-    ElMessage.success('已派单')
+    await assignBooking(booking.bookingId)
+    ElMessage.success('已接取')
     loadWorkbench()
   } catch (err: any) {
     const msg = err?.message || String(err)

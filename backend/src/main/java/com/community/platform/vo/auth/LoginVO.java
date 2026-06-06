@@ -17,4 +17,6 @@ public class LoginVO {
     private String username;
 
     private List<String> roles;
+
+    private String staffType;
 }

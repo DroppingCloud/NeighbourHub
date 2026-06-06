@@ -21,19 +21,24 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS `user` (
   `user_id`     BIGINT       NOT NULL AUTO_INCREMENT COMMENT '用户 ID',
   `username`    VARCHAR(50)  NOT NULL                COMMENT '登录用户名',
+  `account`     VARCHAR(50)  DEFAULT NULL            COMMENT '系统分配账号',
   `password`    VARCHAR(100) NOT NULL                COMMENT 'BCrypt 密码哈希',
   `phone`       VARCHAR(20)  DEFAULT NULL            COMMENT '手机号',
   `email`       VARCHAR(100) DEFAULT NULL            COMMENT '邮箱',
+  `avatar`      VARCHAR(255) DEFAULT NULL            COMMENT '头像文件相对路径',
   `status`      VARCHAR(20)  NOT NULL DEFAULT 'active' COMMENT 'active/disabled',
   `create_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted`     TINYINT      NOT NULL DEFAULT 0      COMMENT '逻辑删除: 0正常 1已删除',
   `role`        VARCHAR(30)  DEFAULT NULL            COMMENT 'admin/staff/resident/family',
+  `staff_type`  VARCHAR(30)  DEFAULT NULL            COMMENT 'application/booking; only for staff',
   `community_id` BIGINT      DEFAULT NULL            COMMENT '社区 ID',
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `uk_username` (`username`),
+  UNIQUE KEY `uk_account` (`account`),
   UNIQUE KEY `uk_phone` (`phone`),
   KEY `idx_status` (`status`),
+  KEY `idx_staff_type` (`staff_type`),
   KEY `idx_user_community_id` (`community_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户账号表';
 
@@ -277,16 +282,18 @@ CREATE TABLE IF NOT EXISTS `notice` (
 -- ============================================================
 
 INSERT IGNORE INTO `user`
-  (`user_id`, `username`, `password`, `phone`, `status`, `role`, `community_id`)
+  (`user_id`, `username`, `password`, `phone`, `status`, `role`, `staff_type`, `community_id`)
 VALUES
-  (1, 'admin',      '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', 1),
-  (2, 'staff01',    '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 1),
-  (3, 'resident01', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', 1),
-  (4, 'family01',   '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', 1);
+  (1, 'admin',      '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13800000000', 'active', 'admin', NULL, 1),
+  (2, 'staff01',    '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13811111111', 'active', 'staff', 'application', 1),
+  (5, 'booking01',  '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13844444444', 'active', 'staff', 'booking', 1),
+  (3, 'resident01', '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13822222222', 'active', 'resident', NULL, 1),
+  (4, 'family01',   '$2b$10$YKqmZFlX3X/601xg61sUUOrjtdKOjDyXwS1pGN/FurrJ.84A0KLiS', '13833333333', 'active', 'family', NULL, 1);
 
 INSERT IGNORE INTO `user_role` (`user_id`, `role_code`) VALUES
   (1, 'ROLE_ADMIN'),
   (2, 'ROLE_STAFF'),
+  (5, 'ROLE_STAFF'),
   (3, 'ROLE_RESIDENT'),
   (4, 'ROLE_FAMILY');
 
@@ -300,7 +307,7 @@ SET
     ELSE 'resident'
   END,
   u.community_id = COALESCE(u.community_id, 1)
-WHERE u.user_id IN (1, 2, 3, 4);
+WHERE u.user_id IN (1, 2, 3, 4, 5);
 
 -- ============================================================
 -- UTF-8 correction block for active demo data and material rules.

@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getProxyRelations, type ProxyRelationVO } from '@/api/user'
+import { useAuthStore } from '@/stores/auth'
 
 export interface ProxyTarget {
   id: number          // 绑定关系ID
   profileId: number   // 被代理人档案ID
-  targetUserId: number // 被代理人用户ID（用于 _proxyFor 参数）
+  targetUserId: number // 被代理人用户ID
   name: string        // 被代理人姓名（从档案获取）
   relation: string    // 关系
   authorizedActions: string  // 授权范围
@@ -19,11 +20,20 @@ export const useProxyStore = defineStore('proxy', () => {
 
   // 加载家属绑定的被代理人列表
   async function loadTargets() {
+    const authStore = useAuthStore()
+    const currentUserId = Number(authStore.userInfo?.userId || 0)
+    const currentRole = normalizeRole(authStore.userInfo?.role || '')
+    if (currentRole !== 'family' || !currentUserId) {
+      setCurrentTarget(null)
+      targets.value = []
+      return
+    }
+
     const list: ProxyRelationVO[] = await getProxyRelations()
-    // 过滤出状态为 active 的绑定关系，并转换为 ProxyTarget
-    // 注意：需要从后端获取目标居民的姓名，可能需要额外接口，这里假设 ProxyRelationVO 已包含 targetProfileName
+    // 只把“当前家属作为代理人”的 active 关系作为可代办目标。
+    // 居民视角也会返回绑定关系，但不能放入代办目标，否则会把居民自己的请求误加 _proxyFor。
     targets.value = list
-      .filter(item => item.status === 'active')
+      .filter(item => item.status === 'active' && Number(item.proxyUserId) === currentUserId)
       .map(item => ({
         id: item.id,
         profileId: item.targetProfileId!,
@@ -32,9 +42,9 @@ export const useProxyStore = defineStore('proxy', () => {
         relation: item.relation || '家属',
         authorizedActions: item.authorizedActions || ''
       }))
-    // 如果当前没有选中且存在目标，默认选中第一个（可选）
-    if (!currentTarget.value && targets.value.length > 0) {
-      currentTarget.value = targets.value[0]
+
+    if (currentTarget.value && !targets.value.some(target => target.id === currentTarget.value?.id)) {
+      setCurrentTarget(null)
     }
   }
 
@@ -60,9 +70,17 @@ export const useProxyStore = defineStore('proxy', () => {
     const savedId = localStorage.getItem('currentProxyId')
     if (savedId) {
       const found = targets.value.find(t => String(t.id) === savedId)
-      if (found) currentTarget.value = found
+      if (found) {
+        currentTarget.value = found
+      } else {
+        setCurrentTarget(null)
+      }
     }
   }
 
   return { currentTarget, targets, loadTargets, setCurrentTarget, clearTarget, restoreTarget }
 })
+
+function normalizeRole(role: string) {
+  return role.replace(/^ROLE_/, '').toLowerCase()
+}

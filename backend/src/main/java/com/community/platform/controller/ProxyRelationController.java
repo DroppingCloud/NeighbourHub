@@ -1,18 +1,23 @@
 package com.community.platform.controller;
 
 import com.community.platform.common.Result;
+import com.community.platform.dto.proxy.ProxyApplyDTO;
 import com.community.platform.dto.proxy.ProxyBindDTO;
 import com.community.platform.entity.ProxyRelation;
 import com.community.platform.service.ProxyRelationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid;
-import com.community.platform.dto.proxy.ProxyApplyDTO;
-
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -48,7 +53,7 @@ public class ProxyRelationController {
     @PostMapping("/apply")
     @PreAuthorize("hasRole('FAMILY')")
     public Result<Long> apply(@AuthenticationPrincipal Long userId,
-                          @Valid @RequestBody ProxyApplyDTO dto) {
+                              @Valid @RequestBody ProxyApplyDTO dto) {
         return Result.success(proxyRelationService.apply(userId, dto));
     }
 
@@ -72,5 +77,3 @@ public class ProxyRelationController {
         return Result.success();
     }
 }
-
-

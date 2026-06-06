@@ -4,8 +4,8 @@
 
 ## 认证管理
 
-- `POST /api/auth/login`：用户登录。请求体：`username`、`password`。返回 token、用户 ID、用户名和角色列表。
-- `POST /api/auth/register`：用户注册。请求体：`username`、`password`、`phone`、`email`、`realName`、`idCard` 等。
+- `POST /api/auth/login`：用户登录。请求体：`username`、`password`。返回 token、用户 ID、用户名和角色列表。系统内置管理员账号为 `admin`，默认密码 `123456`，登录鉴权由代码固定提供，不依赖数据库管理员记录。
+- `POST /api/auth/register`：用户注册。请求体：`username`、`password`、`phone`、`email`、`realName`、`idCard`、`role` 等。公开注册仅支持 `role=resident`（居民用户）或 `role=family`（家属用户）；工作人员不能自行注册，必须由管理员后台创建。
 - `POST /api/auth/logout`：退出登录。
 - `GET /api/auth/me`：获取当前登录用户信息。
 
@@ -16,7 +16,7 @@
 
 ## 事项申请
 
-- `POST /api/application/submit`：提交申请。请求体：`itemId`、`proxyUserId`、`formData`、`remark`。写入 `application_form`，同时创建 `work_order` 并发送通知。
+- `POST /api/application/submit`：提交申请。请求体：`itemId`、`proxyUserId`、`formData`、`remark`。写入 `application_form`，同时创建 `work_order` 并发送通知；工单会按“同社区优先 + 事项工单/服务预约综合负载最低”自动分配给工作人员。
 - `GET /api/application/list`：申请列表。参数：`status`、`itemId`、`pageNum`、`pageSize`。
 - `GET /api/application/{id}`：申请详情，仅本人或代理人可查看。详情返回申请基本信息、事项名称、事项分类、状态中文、备注、材料列表、必需材料列表、材料完整性结果、工单状态和审核意见；材料列表中的 `fileUrl` 指向 `/api/application/material/{materialId}/file`。
 - `PUT /api/application/{id}/withdraw`：撤回申请。仅 `pending`、`approved`、`supplement_required` 状态允许撤回；撤回后申请状态变为 `cancelled`，前端显示“已撤回”。
@@ -38,14 +38,17 @@
 - `GET /api/workorder/{id}`：工单详情。返回内容同工单列表单项，包含申请填写资料、已提交材料、材料完整性结果和工单处理信息。
 - `POST /api/workorder/audit`：审核工单。请求体：`orderId`、`action`、`opinion`。`action` 支持 `approved`、`rejected`、`supplement_required`、`completed`、`processing`。当 `action` 为 `approved` 或 `completed` 时，后端会校验必填材料是否齐全，并拦截任何预审未通过的材料；若缺少材料或存在预审失败材料，则返回参数错误。`supplement_required` 会把缺失材料名称自动追加到审核意见中。
 - `GET /api/workorder/{id}/logs`：查询工单操作日志。
+- 工单自动分配：候选人限定为 `user.role = staff`、`status = active` 且 `staff_type = application` 的事项办理工作人员；有 `community_id` 时只在同社区内分配，无社区信息时从全体可用事项办理工作人员中按待审核/处理中工单负载最低原则选择。每个工单只保存一个 `staff_user_id`，服务预约工作人员不能查看或处理事项工单。
 
 ## 服务预约
 
-- `POST /api/booking/create`：发起预约。请求体：`serviceType`、`expectTime`、`address`、`remark`。`serviceType` 支持 `dining`、`accompany`、`home_visit`。
+- `POST /api/booking/create`：发起预约。请求体：`serviceType`、`expectTime`、`address`、`remark`。`serviceType` 支持 `dining`、`accompany`、`home_visit`。创建成功后保持 `pending`，等待服务预约工作人员主动接取。
 - `GET /api/booking/list`：预约列表。参数：`pageNum`、`pageSize`。
 - `GET /api/booking/{id}`：预约详情。
 - `PUT /api/booking/{id}/cancel`：取消预约，仅 `pending` / `confirmed` 状态允许。
 - `PUT /api/booking/{id}/assign`：分配工作人员。请求体：`staffUserId`，预约状态更新为 `confirmed`。
+- `GET /api/booking/staff/list`：服务预约工作人员端预约列表。`staff_type=booking` 的工作人员可查看待接取预约和自己已接取的预约；管理员可查看全部预约，并可通过 `staffUserId` 查询指定服务预约工作人员的已接取/已办理预约；事项办理工作人员不可处理预约。
+- `PUT /api/booking/{id}/claim`：服务预约工作人员主动接取预约。仅 `pending` 预约可接取，接取后写入唯一 `staff_user_id` 并更新为 `confirmed`，保证每个预约只归属一个工作人员。
 - `PUT /api/booking/{id}/complete`：完成预约服务。请求体：`feedback`，预约状态更新为 `completed`。
 - `POST /api/booking/{id}/feedback`：提交服务反馈，仅本人或代理人可操作已完成预约。
 
@@ -65,6 +68,7 @@
 ## 管理后台
 
 - `GET /api/admin/service-item/list`：事项列表。参数：`category`、`status`、`pageNum`、`pageSize`。
+- `POST /api/admin/staff`：管理员新增工作人员账号。请求体：`username`、`realName`、`phone`、`email`、`communityId`、`staffType`。`staffType=application` 表示事项办理工作人员，`staffType=booking` 表示服务预约工作人员；初始密码统一为 `123456`。
 - `POST /api/admin/service-item`：创建事项。
 - `PUT /api/admin/service-item/{id}`：更新事项。
 - `DELETE /api/admin/service-item/{id}`：删除事项，使用 MyBatis-Plus 逻辑删除。

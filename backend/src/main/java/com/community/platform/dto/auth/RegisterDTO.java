@@ -31,6 +31,6 @@ public class RegisterDTO {
     /** optional system assigned account */
     private String account;
 
-    /** optional role: resident | staff | admin */
+    /** optional public registration role: resident | family */
     private String role;
 }

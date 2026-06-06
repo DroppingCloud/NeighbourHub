@@ -1,94 +1,112 @@
 <template>
   <div class="user-management-container">
-    <!-- 头部标题 -->
     <div class="page-header">
       <h2>用户管理</h2>
-      <p>管理系统用户、角色权限和账号状态</p>
+      <p>按工作人员、居民和家属分类管理账号；工作人员账号由管理员创建，初始密码统一为 123456。</p>
     </div>
 
-    <!-- 筛选栏：左右布局、深色圆角按钮 -->
+    <div class="role-tabs" role="tablist" aria-label="用户类型">
+      <button
+        v-for="item in roleTabs"
+        :key="item.value"
+        class="role-tab"
+        :class="{ active: activeRole === item.value }"
+        type="button"
+        @click="switchRole(item.value)"
+      >
+        <span>{{ item.label }}</span>
+        <small>{{ item.desc }}</small>
+      </button>
+    </div>
+
     <div class="filter-card">
       <div class="filter-left">
         <el-input
           v-model="searchKeyword"
-          placeholder="用户名/手机号"
+          placeholder="用户名 / 姓名 / 手机号"
           clearable
           class="search-inp"
-          @clear="loadUsers"
-          @keyup.enter="loadUsers"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-select v-model="filterRole" placeholder="全部角色" clearable class="sel-item" @change="loadUsers">
-          <el-option label="居民用户" value="resident" />
-          <el-option label="家属用户" value="family" />
-          <el-option label="工作人员" value="staff" />
-          <el-option label="管理员" value="admin" />
+
+        <el-select
+          v-if="activeRole === 'staff'"
+          v-model="filterStaffType"
+          placeholder="全部工作人员类型"
+          clearable
+          class="sel-item wide"
+        >
+          <el-option label="事项办理工作人员" value="application" />
+          <el-option label="服务预约工作人员" value="booking" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="全部状态" clearable class="sel-item" @change="loadUsers">
+
+        <el-select v-model="filterStatus" placeholder="全部状态" clearable class="sel-item">
           <el-option label="正常" value="active" />
           <el-option label="禁用" value="disabled" />
         </el-select>
+
         <el-button class="btn-dark" @click="loadUsers">
-          <el-icon><Search /></el-icon>查询
+          <el-icon><Search /></el-icon>
+          查询
         </el-button>
       </div>
-      <div class="filter-right">
-        <el-button class="btn-dark" @click="showAddDialog = true">
-          <el-icon><Plus /></el-icon>新增用户
-        </el-button>
-      </div>
+
+      <el-button v-if="activeRole === 'staff'" class="btn-dark" @click="showAddDialog = true">
+        <el-icon><Plus /></el-icon>
+        新增工作人员
+      </el-button>
     </div>
 
-    <!-- 表格区域：浅米色表头，带图标tag，三色操作按钮 -->
     <div class="table-card">
       <el-table
-        :data="users"
+        :data="filteredUsers"
         stripe
         v-loading="loading"
         :header-cell-style="{ background: '#f3efe6', color: '#333', fontWeight: 500 }"
       >
-        <el-table-column prop="userId" label="用户ID" width="70" align="left" />
-        <el-table-column prop="username" label="用户名" min-width="100" />
-        <el-table-column prop="realName" label="真实姓名" min-width="110" />
+        <el-table-column prop="userId" label="ID" width="70" />
+        <el-table-column prop="username" label="登录账号" min-width="120" />
+        <el-table-column prop="realName" label="姓名" min-width="110" />
         <el-table-column prop="phone" label="手机号" min-width="130" />
-        <el-table-column label="角色" width="150" align="center">
+
+        <el-table-column label="用户类型" width="120" align="center">
           <template #default="{ row }">
-            <el-tag :type="getRoleType(row.role)" size="default" effect="plain" class="role-tag">
-              <el-icon class="tag-icon"><User /></el-icon>
-              {{ getRoleText(row.role) }}
+            <el-tag :type="roleTagType(row.role)" effect="plain">
+              {{ roleText(row.role) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110" align="center">
+
+        <el-table-column v-if="activeRole === 'staff'" label="工作人员类型" width="170" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="default" effect="plain" class="status-tag">
-              <el-icon><CircleCheck v-if="row.status === 'active'" /><CircleClose v-else /></el-icon>
+            <el-tag :type="row.staffType === 'booking' ? 'warning' : 'primary'" effect="plain">
+              {{ staffTypeText(row.staffType) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="communityId" label="社区ID" width="100" />
+
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'active' ? 'success' : 'info'" effect="plain">
               {{ row.status === 'active' ? '正常' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="注册时间" min-width="170" />
-        <el-table-column label="操作" width="180" fixed="right" align="center">
+
+        <el-table-column v-if="activeRole === 'staff'" label="业务情况" width="120" align="center">
           <template #default="{ row }">
-            <div class="opt-btn-group">
-              <el-button class="opt-edit" size="small" @click="editUser(row)">
-                <el-icon><Edit /></el-icon>编辑
-              </el-button>
-              <el-button class="opt-switch" size="small" @click="toggleUserStatus(row)">
-                <el-icon><Switch /></el-icon>{{ row.status === 'active' ? '禁用' : '启用' }}
-              </el-button>
-              <el-button class="opt-del" size="small" @click="deleteUser(row)">
-                <el-icon><Delete /></el-icon>删除
-              </el-button>
-            </div>
+            <el-button link type="primary" @click="openStaffBusiness(row)">查看业务</el-button>
           </template>
         </el-table-column>
+
+        <el-table-column prop="createTime" label="创建时间" min-width="170" />
       </el-table>
 
-      <!-- 分页 -->
       <div class="page-wrap">
         <el-pagination
           v-model:current-page="currentPage"
@@ -102,61 +120,107 @@
       </div>
     </div>
 
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="showAddDialog" :title="editingUser ? '编辑用户' : '新增用户'" width="520px" @close="resetForm">
-      <el-form :model="userForm" :rules="userFormRules" ref="userFormRef" label-width="85px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="userForm.username" placeholder="请输入用户名" />
+    <el-dialog v-model="showAddDialog" title="新增工作人员" width="520px" @close="resetForm">
+      <el-alert
+        title="工作人员账号只能由管理员创建，初始密码为 123456，登录后可自行修改。居民和家属账号仍通过注册流程创建。"
+        type="info"
+        show-icon
+        :closable="false"
+        class="dialog-tip"
+      />
+
+      <el-form :model="staffForm" :rules="staffFormRules" ref="staffFormRef" label-width="8rem">
+        <el-form-item label="登录账号" prop="username">
+          <el-input v-model="staffForm.username" placeholder="请输入登录账号" />
         </el-form-item>
         <el-form-item label="真实姓名" prop="realName">
-          <el-input v-model="userForm.realName" placeholder="请输入真实姓名" />
+          <el-input v-model="staffForm.realName" placeholder="请输入工作人员姓名" />
         </el-form-item>
         <el-form-item label="手机号" prop="phone">
-          <el-input v-model="userForm.phone" placeholder="请输入手机号" />
+          <el-input v-model="staffForm.phone" placeholder="请输入手机号" />
         </el-form-item>
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="userForm.role" placeholder="请选择角色" style="width:100%">
-            <el-option label="居民用户" value="resident" />
-            <el-option label="家属用户" value="family" />
-            <el-option label="工作人员" value="staff" />
-            <el-option label="管理员" value="admin" />
-          </el-select>
+        <el-form-item label="邮箱">
+          <el-input v-model="staffForm.email" placeholder="可选" />
         </el-form-item>
-        <el-form-item label="账号状态" prop="status">
-          <el-radio-group v-model="userForm.status">
-            <el-radio value="active">正常</el-radio>
-            <el-radio value="disabled">禁用</el-radio>
-          </el-radio-group>
+        <el-form-item label="社区ID">
+          <el-input-number v-model="staffForm.communityId" :min="1" controls-position="right" />
         </el-form-item>
-        <el-form-item label="登录密码" prop="password" v-if="!editingUser">
-          <el-input v-model="userForm.password" show-password placeholder="密码不少于6位" />
+        <el-form-item label="工作人员类型" prop="staffType">
+          <el-segmented v-model="staffForm.staffType" :options="staffTypeOptions" />
         </el-form-item>
       </el-form>
+
       <template #footer>
         <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="saveUser">确认保存</el-button>
+        <el-button type="primary" :loading="submitting" @click="saveStaff">创建账号</el-button>
       </template>
     </el-dialog>
 
-    <!-- 删除弹窗 -->
-    <el-dialog v-model="showDeleteDialog" title="删除确认" width="420px">
-      <div class="delete-tip">
-        <p>确定删除用户 <strong>{{ deleteUserInfo?.username }}</strong>？</p>
-        <p class="tip-red">删除数据无法恢复，请谨慎操作！</p>
+    <el-dialog v-model="businessDialogVisible" title="工作人员业务情况" width="780px">
+      <div v-if="activeStaff" class="business-dialog">
+        <div class="staff-summary">
+          <div>
+            <span class="muted">工作人员</span>
+            <strong>{{ activeStaff.realName || activeStaff.username }}</strong>
+          </div>
+          <el-tag :type="activeStaff.staffType === 'booking' ? 'warning' : 'primary'" effect="plain">
+            {{ staffTypeText(activeStaff.staffType) }}
+          </el-tag>
+        </div>
+
+        <el-skeleton v-if="businessLoading" :rows="5" animated />
+        <template v-else>
+          <div class="business-stats">
+            <div>
+              <strong>{{ pendingBusiness.length }}</strong>
+              <span>当前待办</span>
+            </div>
+            <div>
+              <strong>{{ finishedBusiness.length }}</strong>
+              <span>已办理</span>
+            </div>
+          </div>
+
+          <div class="business-columns">
+            <section>
+              <h4>当前待办</h4>
+              <el-empty v-if="pendingBusiness.length === 0" description="暂无待办业务" :image-size="80" />
+              <div v-for="item in pendingBusiness" :key="item.key" class="business-item">
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.desc }}</p>
+                </div>
+                <el-tag effect="plain">{{ item.statusLabel }}</el-tag>
+              </div>
+            </section>
+
+            <section>
+              <h4>已办理</h4>
+              <el-empty v-if="finishedBusiness.length === 0" description="暂无已办理业务" :image-size="80" />
+              <div v-for="item in finishedBusiness" :key="item.key" class="business-item">
+                <div>
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.desc }}</p>
+                </div>
+                <el-tag type="success" effect="plain">{{ item.statusLabel }}</el-tag>
+              </div>
+            </section>
+          </div>
+        </template>
       </div>
-      <template #footer>
-        <el-button @click="showDeleteDialog = false">取消</el-button>
-        <el-button type="danger" :loading="deleting" @click="confirmDelete">确认删除</el-button>
-      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, Edit, Delete, Switch, User, CircleCheck, CircleClose } from '@element-plus/icons-vue'
-import { getUsersByRole } from '@/api/user'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Plus, Search } from '@element-plus/icons-vue'
+import { createStaff, getUsersByRole, type StaffCreateRequest } from '@/api/user'
+import { getStaffBookingList, type BookingVO } from '@/api/booking'
+import { getWorkOrderList, type WorkOrderVO } from '@/api/workOrder'
+
+type RoleType = 'staff' | 'resident' | 'family'
 
 interface UserRow {
   userId: number
@@ -164,124 +228,200 @@ interface UserRow {
   realName?: string
   phone?: string
   role: string
+  staffType?: string
+  communityId?: number
   status: string
   createTime: string
 }
 
-// 筛选变量
+const roleTabs: Array<{ label: string; value: RoleType; desc: string }> = [
+  { label: '工作人员', value: 'staff', desc: '事项办理 / 服务预约' },
+  { label: '居民', value: 'resident', desc: '社区居民账号' },
+  { label: '家属', value: 'family', desc: '代办授权账号' }
+]
+
+const activeRole = ref<RoleType>('staff')
 const searchKeyword = ref('')
-const filterRole = ref('')
+const filterStaffType = ref('')
 const filterStatus = ref('')
 const currentPage = ref(1)
-const pageSize = ref(100)
+const pageSize = ref(20)
 const total = ref(0)
 const loading = ref(false)
 const users = ref<UserRow[]>([])
-
-// 弹窗
 const showAddDialog = ref(false)
-const showDeleteDialog = ref(false)
-const editingUser = ref<UserRow | null>(null)
 const submitting = ref(false)
-const deleting = ref(false)
-const deleteUserInfo = ref<UserRow | null>(null)
+const staffFormRef = ref()
+const businessDialogVisible = ref(false)
+const businessLoading = ref(false)
+const activeStaff = ref<UserRow | null>(null)
+const pendingBusiness = ref<BusinessItem[]>([])
+const finishedBusiness = ref<BusinessItem[]>([])
 
-// 表单
-const userFormRef = ref()
-const userForm = ref({
+interface BusinessItem {
+  key: string
+  title: string
+  desc: string
+  statusLabel: string
+}
+
+const staffTypeOptions = [
+  { label: '事项办理', value: 'application' },
+  { label: '服务预约', value: 'booking' }
+]
+
+const staffForm = ref<StaffCreateRequest>({
   username: '',
   realName: '',
   phone: '',
-  role: 'resident' as UserRow['role'],
-  status: 'active' as UserRow['status'],
-  password: ''
+  email: '',
+  communityId: 1,
+  staffType: 'application'
 })
 
-// 表单校验
-const userFormRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 2, max: 20, message: '2~20位字符', trigger: 'blur' }],
+const staffFormRules = {
+  username: [
+    { required: true, message: '请输入登录账号', trigger: 'blur' },
+    { min: 2, max: 20, message: '账号长度为 2-20 位', trigger: 'blur' }
+  ],
   realName: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
-  phone: [{ required: true, message: '请填写手机号', trigger: 'blur' }, { pattern: /^1[3-9]\d{9}$/, message: '手机号格式错误', trigger: 'blur' }],
-  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
-  password: [{ required: true, message: '请设置密码', trigger: 'blur' }, { min: 6, message: '密码至少6位', trigger: 'blur' }]
+  phone: [
+    { pattern: /^$|^1[3-9]\d{9}$/, message: '手机号格式错误', trigger: 'blur' }
+  ],
+  staffType: [{ required: true, message: '请选择工作人员类型', trigger: 'change' }]
 }
 
-// 角色tag配色
-function getRoleType(role: string) {
-  const map: Record<string, string> = {
-    resident: 'success',
-    family: 'warning',
-    staff: 'primary',
-    admin: 'danger'
-  }
-  return map[role] || 'info'
-}
-function getRoleText(role: string) {
-  const map: Record<string, string> = { resident: '居民用户', family: '家属用户', staff: '工作人员', admin: '管理员' }
-  return map[role] || role
+const filteredUsers = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  return users.value.filter(user => {
+    const matchKeyword = !keyword
+      || user.username?.toLowerCase().includes(keyword)
+      || user.realName?.toLowerCase().includes(keyword)
+      || user.phone?.includes(keyword)
+    const matchType = activeRole.value !== 'staff' || !filterStaffType.value || user.staffType === filterStaffType.value
+    const matchStatus = !filterStatus.value || user.status === filterStatus.value
+    return matchKeyword && matchType && matchStatus
+  })
+})
+
+function switchRole(role: RoleType) {
+  if (activeRole.value === role) return
+  activeRole.value = role
+  filterStaffType.value = ''
+  currentPage.value = 1
+  loadUsers()
 }
 
-// 加载列表 —— 真实接口，无假数据
+function staffTypeText(type?: string) {
+  if (type === 'booking') return '服务预约工作人员'
+  if (type === 'application') return '事项办理工作人员'
+  return '未设置'
+}
+
+function roleText(role?: string) {
+  if (role === 'staff') return '工作人员'
+  if (role === 'family') return '家属'
+  if (role === 'admin') return '管理员'
+  return '居民'
+}
+
+function roleTagType(role?: string) {
+  if (role === 'staff') return 'primary'
+  if (role === 'family') return 'warning'
+  if (role === 'admin') return 'danger'
+  return 'success'
+}
+
 async function loadUsers() {
   loading.value = true
   try {
-    const page = await getUsersByRole(filterRole.value, currentPage.value, pageSize.value)
+    const page = await getUsersByRole(activeRole.value, currentPage.value, pageSize.value)
     users.value = page.records || []
-    total.value = page.total || 0
+    total.value = page.total || users.value.length
   } finally {
     loading.value = false
   }
 }
 
-// 表单重置
 function resetForm() {
-  userForm.value = { username: '', realName: '', phone: '', role: 'resident', status: 'active', password: '' }
-  editingUser.value = null
-  userFormRef.value?.resetFields()
+  staffForm.value = {
+    username: '',
+    realName: '',
+    phone: '',
+    email: '',
+    communityId: 1,
+    staffType: 'application'
+  }
+  staffFormRef.value?.resetFields()
 }
 
-// 编辑
-function editUser(user: UserRow) {
-  editingUser.value = user
-  // userForm.value = { ...user, password: '' }
-  showAddDialog.value = true
-}
-
-// 保存
-async function saveUser() {
-  await userFormRef.value?.validate(async (valid: boolean) => {
+async function saveStaff() {
+  await staffFormRef.value?.validate(async (valid: boolean) => {
     if (!valid) return
     submitting.value = true
-    await new Promise(r => setTimeout(r, 400))
-    submitting.value = false
-    ElMessage.success(editingUser.value ? '修改成功' : '新增成功')
-    showAddDialog.value = false
-    loadUsers()
+    try {
+      await createStaff(staffForm.value)
+      ElMessage.success('工作人员账号已创建，初始密码为 123456')
+      showAddDialog.value = false
+      await loadUsers()
+    } catch (error: any) {
+      ElMessage.error(error.message || '创建失败')
+    } finally {
+      submitting.value = false
+    }
   })
 }
 
-// 启用禁用
-function toggleUserStatus(user: UserRow) {
-  const tip = user.status === 'active' ? '禁用' : '启用'
-  ElMessageBox.confirm(`确认${tip}【${user.username}】账号？`, '提示', { type: 'warning' }).then(() => {
-    user.status = user.status === 'active' ? 'disabled' : 'active'
-    ElMessage.success(`${tip}成功`)
-    loadUsers()
-  }).catch(() => {})
+async function openStaffBusiness(row: UserRow) {
+  activeStaff.value = row
+  businessDialogVisible.value = true
+  businessLoading.value = true
+  pendingBusiness.value = []
+  finishedBusiness.value = []
+
+  try {
+    if (row.staffType === 'booking') {
+      const page = await getStaffBookingList(1, 100, undefined, row.userId)
+      const records = (page.records || []) as BookingVO[]
+      pendingBusiness.value = records
+        .filter(item => ['confirmed', 'in_progress'].includes(item.status))
+        .map(toBookingBusinessItem)
+      finishedBusiness.value = records
+        .filter(item => ['completed', 'cancelled'].includes(item.status))
+        .map(toBookingBusinessItem)
+    } else {
+      const page = await getWorkOrderList({ pageNum: 1, pageSize: 100, staffUserId: row.userId })
+      const records = (page.records || []) as WorkOrderVO[]
+      pendingBusiness.value = records
+        .filter(item => ['pending', 'processing'].includes(item.status))
+        .map(toWorkOrderBusinessItem)
+      finishedBusiness.value = records
+        .filter(item => ['approved', 'completed', 'rejected', 'supplement_required', 'cancelled'].includes(item.status))
+        .map(toWorkOrderBusinessItem)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || '业务情况加载失败')
+  } finally {
+    businessLoading.value = false
+  }
 }
 
-// 删除
-function deleteUser(user: UserRow) {
-  deleteUserInfo.value = user
-  showDeleteDialog.value = true
+function toWorkOrderBusinessItem(item: WorkOrderVO): BusinessItem {
+  return {
+    key: `workorder-${item.orderId}`,
+    title: item.itemName || `事项工单 ${item.orderId}`,
+    desc: `${item.residentName || '居民'} · ${item.createTime || ''}`,
+    statusLabel: item.statusLabel || item.status
+  }
 }
-async function confirmDelete() {
-  deleting.value = true
-  await new Promise(r => setTimeout(r, 400))
-  deleting.value = false
-  showDeleteDialog.value = false
-  ElMessage.success('删除完成')
-  loadUsers()
+
+function toBookingBusinessItem(item: BookingVO): BusinessItem {
+  return {
+    key: `booking-${item.bookingId}`,
+    title: item.serviceTypeLabel || `服务预约 ${item.bookingId}`,
+    desc: `${item.address || '未填写地址'} · ${item.expectTime || item.createTime || ''}`,
+    statusLabel: item.statusLabel || item.status
+  }
 }
 
 onMounted(loadUsers)
@@ -291,176 +431,241 @@ onMounted(loadUsers)
 .user-management-container {
   max-width: 76rem;
   margin: 0 auto;
-  padding: 32px;
+  padding: 2rem;
   background-color: #fcf9f0;
   min-height: 100vh;
 }
+
 .page-header {
-  margin-bottom: 24px;
+  margin-bottom: 1.25rem;
 }
+
 .page-header h2 {
-  font-size: 28px;
-  margin: 0 0 8px;
+  font-size: 1.75rem;
+  margin: 0 0 0.5rem;
   color: #222;
   font-weight: 600;
 }
+
 .page-header p {
   color: #777;
-  font-size: 15px;
+  font-size: 0.95rem;
   margin: 0;
 }
 
-/* 筛选卡片样式（白色圆角） */
+.role-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.role-tab {
+  border: 1px solid #e2ddd2;
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  text-align: left;
+  cursor: pointer;
+  color: #555b75;
+  transition: all 0.2s ease;
+}
+
+.role-tab span,
+.role-tab small {
+  display: block;
+}
+
+.role-tab span {
+  font-size: 1.05rem;
+  color: #11142b;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.role-tab small {
+  font-size: 0.85rem;
+  color: #858ba8;
+}
+
+.role-tab.active {
+  border-color: #d4a843;
+  background: #f5efe1;
+  box-shadow: 0 0.25rem 1rem rgba(212, 168, 67, 0.16);
+}
+
 .filter-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap:16px;
+  gap: 1rem;
   background: #fff;
-  padding:20px 24px;
-  border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-  margin-bottom:20px;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0.875rem;
+  box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.25rem;
 }
+
 .filter-left {
   display: flex;
   align-items: center;
-  gap:14px;
+  gap: 0.875rem;
   flex-wrap: wrap;
 }
+
 .search-inp {
-  width:220px;
+  width: 14rem;
 }
+
 .sel-item {
-  width:145px;
+  width: 11rem;
 }
-.filter-right {
-  flex-shrink: 0;
+
+.sel-item.wide {
+  width: 13rem;
 }
-/* 深色填充按钮 匹配截图黑底白字 */
+
 .btn-dark {
   background-color: #222633 !important;
   color: #fff !important;
   border: none !important;
-  border-radius: 8px !important;
-  padding: 0 18px !important;
+  border-radius: 0.5rem !important;
 }
 
-/* 表格卡片 */
 .table-card {
-  background:#fff;
-  border-radius:14px;
-  box-shadow:0 2px 12px rgba(0,0,0,0.05);
+  background: #fff;
+  border-radius: 0.875rem;
+  box-shadow: 0 0.125rem 0.75rem rgba(0, 0, 0, 0.05);
   overflow: hidden;
 }
+
 .page-wrap {
-  margin:20px 24px;
-  display:flex;
+  margin: 1.25rem 1.5rem;
+  display: flex;
   justify-content: flex-end;
 }
 
-/* 角色/状态 tag 实色填充 */
-.role-tag, .status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border: none !important;
-  border-radius: 20px;
-  font-size: 13px;
+.dialog-tip {
+  margin-bottom: 1rem;
 }
 
-/* 角色颜色覆盖 */
-.role-tag:deep(.el-tag) { border: none; }
-
-/* 居民用户 - 更浅的绿 */
-:deep(.el-tag--info) {
-  background-color: #f0faf0 !important;
-  color: #4a9e5c !important;
-  border: none !important;
-}
-
-/* 家属用户 - 更浅的橙 */
-:deep(.el-tag--warning) {
-  background-color: #fff8ee !important;
-  color: #d07a1a !important;
-  border: none !important;
-}
-
-/* 工作人员 - 更浅的蓝 */
-:deep(.el-tag--primary) {
-  background-color: #f0f7ff !important;
-  color: #3a7cc7 !important;
-  border: none !important;
-}
-
-/* 管理员 - 更浅的红 */
-:deep(.el-tag--danger) {
-  background-color: #fff2f2 !important;
-  color: #d94f4f !important;
-  border: none !important;
-}
-
-/* 正常状态 */
-.status-tag.el-tag--success {
-  background-color: #f0faf0 !important;
-  color: #4a9e5c !important;
-  border: none !important;
-}
-
-/* 禁用状态 */
-.status-tag.el-tag--danger {
-  background-color: #fff2f2 !important;
-  color: #d94f4f !important;
-  border: none !important;
-}
-
-/* 操作按钮三色样式 */
-.opt-btn-group {
+.business-dialog {
   display: flex;
   flex-direction: column;
-  gap:6px;
-}
-.opt-edit {
-  background-color: #222633 !important;
-  color: #fff !important;
-  border: none;
-  border-radius:6px;
-}
-.opt-switch {
-  color:#e69500 !important;
-  background: transparent;
-  border: none;
-}
-.opt-del {
-  color:#f25656 !important;
-  background: transparent;
-  border: none;
+  gap: 1rem;
 }
 
-/* 删除弹窗提示 */
-.delete-tip {
-  text-align:center;
-  padding:10px 0;
-}
-.tip-red {
-  color:#f56c6c;
-  margin-top:6px;
-  font-size:13px;
+.staff-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f5efe1;
+  border-radius: 0.75rem;
 }
 
-/* 移动端适配 */
-@media (max-width:640px) {
-  .filter-card {
-    flex-direction:column;
-    align-items:stretch;
+.staff-summary strong,
+.staff-summary .muted {
+  display: block;
+}
+
+.staff-summary strong {
+  margin-top: 0.25rem;
+  color: #11142b;
+  font-size: 1.1rem;
+}
+
+.staff-summary .muted {
+  color: #858ba8;
+  font-size: 0.85rem;
+}
+
+.business-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.business-stats div {
+  padding: 1rem;
+  border: 1px solid #e2ddd2;
+  border-radius: 0.75rem;
+  background: #fff;
+  text-align: center;
+}
+
+.business-stats strong,
+.business-stats span {
+  display: block;
+}
+
+.business-stats strong {
+  color: #11142b;
+  font-size: 1.5rem;
+}
+
+.business-stats span {
+  color: #858ba8;
+  font-size: 0.85rem;
+}
+
+.business-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.business-columns h4 {
+  margin: 0 0 0.75rem;
+  color: #11142b;
+}
+
+.business-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem;
+  border: 1px solid #e2ddd2;
+  border-radius: 0.75rem;
+  margin-bottom: 0.75rem;
+  background: #fff;
+}
+
+.business-item strong {
+  display: block;
+  color: #11142b;
+  margin-bottom: 0.25rem;
+}
+
+.business-item p {
+  margin: 0;
+  color: #858ba8;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .role-tabs {
+    grid-template-columns: 1fr;
   }
+
+  .business-columns,
+  .business-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-card,
   .filter-left {
-    flex-direction:column;
+    flex-direction: column;
+    align-items: stretch;
   }
-  .search-inp,.sel-item {
-    width:100% !important;
+
+  .search-inp,
+  .sel-item,
+  .sel-item.wide {
+    width: 100% !important;
   }
 }
 </style>

@@ -12,6 +12,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -65,8 +67,9 @@ public class AuthController {
 
     @Operation(summary = "获取用户头像文件")
     @GetMapping("/avatar/{id}")
-    public org.springframework.core.io.Resource getAvatar(@PathVariable("id") Long id) {
-        return authService.loadAvatar(id);
+    public ResponseEntity<Resource> getAvatar(@PathVariable("id") Long id) {
+        Resource resource = authService.loadAvatar(id);
+        return resource == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(resource);
     }
 
     @Operation(summary = "更新当前用户个人信息")

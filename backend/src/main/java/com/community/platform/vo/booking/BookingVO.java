@@ -34,4 +34,13 @@ public class BookingVO {
     private String feedback;
     public String getFeedback() { return feedback; }
     public void setFeedback(String feedback) { this.feedback = feedback; }
+
+    // 是否为代办（有 proxyUserId 表示代办）
+    private Boolean isProxy;
+    private String proxyUserName;
+
+    public Boolean getIsProxy() { return isProxy; }
+    public void setIsProxy(Boolean isProxy) { this.isProxy = isProxy; }
+    public String getProxyUserName() { return proxyUserName; }
+    public void setProxyUserName(String proxyUserName) { this.proxyUserName = proxyUserName; }
 }

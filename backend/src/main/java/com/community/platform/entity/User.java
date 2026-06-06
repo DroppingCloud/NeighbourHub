@@ -1,12 +1,17 @@
 package com.community.platform.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 /**
- * 用户表
+ * User account.
  */
 @Data
 @TableName("user")
@@ -23,7 +28,7 @@ public class User {
 
     private String email;
 
-    /** 状态: active/disabled */
+    /** active/disabled */
     private String status;
 
     @TableField(fill = FieldFill.INSERT)
@@ -35,10 +40,17 @@ public class User {
     @TableLogic
     private Integer deleted;
 
+    /** admin/staff/resident/family */
     private String role;
+
     private Long communityId;
-    /** 系统分配账号（如 SQxxxx） */
+
+    /** Staff business type: application or booking. */
+    private String staffType;
+
+    /** System generated login account, such as SQ0001. */
     private String account;
-    /** 头像文件相对路径，例如 uploads/avatars/xxx.jpg */
+
+    /** Avatar relative file path. */
     private String avatar;
 }

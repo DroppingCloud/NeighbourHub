@@ -53,12 +53,11 @@ public class BookingController {
         return Result.success();
     }
 
-    @Operation(summary = "分配服务人员")
-    @PutMapping("/{id}/assign")
-    public Result<Void> assign(@AuthenticationPrincipal Long operatorId,
-                               @PathVariable Long id,
-                               @Valid @RequestBody BookingAssignDTO dto) {
-        bookingService.assign(operatorId, id, dto.getStaffUserId());
+    @Operation(summary = "工作人员接取预约")
+    @PutMapping("/{id}/claim")
+    public Result<Void> claim(@AuthenticationPrincipal Long staffUserId,
+                              @PathVariable Long id) {
+        bookingService.claim(staffUserId, id);
         return Result.success();
     }
 
@@ -84,10 +83,11 @@ public class BookingController {
     @GetMapping("/staff/list")
     public Result<Page<BookingVO>> staffList(@AuthenticationPrincipal Long userId,
                                              @RequestParam(required = false) String status,
+                                             @RequestParam(required = false) Long staffUserId,
                                              @RequestParam(defaultValue = "1") Integer pageNum,
                                              @RequestParam(defaultValue = "10") Integer pageSize) {
         // 注意：userId 是当前登录用户ID，需确保该用户角色为 staff
-        return Result.success(bookingService.getStaffList(userId, status, pageNum, pageSize));
+        return Result.success(bookingService.getStaffList(userId, staffUserId, status, pageNum, pageSize));
     }
 
     @Operation(summary = "开始服务")

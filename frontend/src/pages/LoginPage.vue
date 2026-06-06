@@ -387,7 +387,8 @@ async function handleLogin() {
             userId: String(res.userId),
             username: res.username,
             phone: form.value.phone,
-            role: (res.roles && res.roles[0]) ? res.roles[0].replace(/^ROLE_/, '').toLowerCase() : 'resident'
+            role: (res.roles && res.roles[0]) ? res.roles[0].replace(/^ROLE_/, '').toLowerCase() : 'resident',
+            staffType: res.staffType
           })
           ElMessage.success('登录成功，欢迎回来！')
           const role = authStore.userInfo?.role
@@ -418,7 +419,8 @@ async function handleLogin() {
         userId: String(res.userId),
         username: res.username,
         phone: form.value.phone,
-        role: (res.roles && res.roles[0]) ? res.roles[0].replace(/^ROLE_/, '').toLowerCase() : 'resident'
+        role: (res.roles && res.roles[0]) ? res.roles[0].replace(/^ROLE_/, '').toLowerCase() : 'resident',
+        staffType: res.staffType
       })
       ElMessage.success('登录成功，欢迎回来！')
       const role = authStore.userInfo?.role
