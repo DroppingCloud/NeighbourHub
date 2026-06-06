@@ -18,10 +18,14 @@
         <!-- Grid pattern overlay -->
         <div class="decor-grid"></div>
       </div>
+      <!-- Particle canvas -->
+      <canvas ref="particleCanvas" class="particle-canvas"></canvas>
+      <!-- Light beam sweep -->
+      <div class="light-beam"></div>
 
       <div class="left-content">
         <div class="brand-mark">
-          <span class="brand-icon">社</span>
+          <img class="brand-icon" src="@/assets/logo.png" alt="社区服务平台" />
           <span class="brand-ring"></span>
         </div>
 
@@ -69,6 +73,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import FontSizeControl from '@/components/FontSizeControl.vue'
 
 const features = [
@@ -77,6 +82,122 @@ const features = [
   { icon: '约', label: '社区服务预约', desc: '助餐陪诊，一键预约' },
   { icon: '代', label: '家属协同代办', desc: '远程授权，进度同步' }
 ]
+
+// ---- Particle Effect ----
+const particleCanvas = ref<HTMLCanvasElement | null>(null)
+let animationId = 0
+
+interface Particle {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  radius: number
+  opacity: number
+  fadeDir: number
+}
+
+onMounted(() => {
+  const canvas = particleCanvas.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const PARTICLE_COUNT = 35
+  const particles: Particle[] = []
+
+  function resize() {
+    if (!canvas) return
+    const rect = canvas.parentElement!.getBoundingClientRect()
+    canvas.width = rect.width * window.devicePixelRatio
+    canvas.height = rect.height * window.devicePixelRatio
+    canvas.style.width = rect.width + 'px'
+    canvas.style.height = rect.height + 'px'
+    ctx!.scale(window.devicePixelRatio, window.devicePixelRatio)
+  }
+
+  function createParticle(): Particle {
+    const rect = canvas!.parentElement!.getBoundingClientRect()
+    return {
+      x: Math.random() * rect.width,
+      y: Math.random() * rect.height,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3 - 0.15,
+      radius: Math.random() * 1.5 + 0.5,
+      opacity: Math.random() * 0.4 + 0.1,
+      fadeDir: Math.random() > 0.5 ? 1 : -1
+    }
+  }
+
+  function init() {
+    resize()
+    particles.length = 0
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push(createParticle())
+    }
+  }
+
+  function draw() {
+    if (!canvas || !ctx) return
+    const rect = canvas.parentElement!.getBoundingClientRect()
+    const w = rect.width
+    const h = rect.height
+
+    ctx.clearRect(0, 0, w, h)
+
+    for (const p of particles) {
+      // Update position
+      p.x += p.vx
+      p.y += p.vy
+
+      // Fade in/out gently
+      p.opacity += p.fadeDir * 0.003
+      if (p.opacity >= 0.5) { p.opacity = 0.5; p.fadeDir = -1 }
+      if (p.opacity <= 0.05) { p.opacity = 0.05; p.fadeDir = 1 }
+
+      // Wrap around edges
+      if (p.x < -10) p.x = w + 10
+      if (p.x > w + 10) p.x = -10
+      if (p.y < -10) p.y = h + 10
+      if (p.y > h + 10) p.y = -10
+
+      // Draw particle
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(212, 168, 67, ${p.opacity})`
+      ctx.fill()
+    }
+
+    // Draw subtle connecting lines between nearby particles
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x
+        const dy = particles[i].y - particles[j].y
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist < 100) {
+          const lineOpacity = (1 - dist / 100) * 0.08
+          ctx.beginPath()
+          ctx.moveTo(particles[i].x, particles[i].y)
+          ctx.lineTo(particles[j].x, particles[j].y)
+          ctx.strokeStyle = `rgba(212, 168, 67, ${lineOpacity})`
+          ctx.lineWidth = 0.5
+          ctx.stroke()
+        }
+      }
+    }
+
+    animationId = requestAnimationFrame(draw)
+  }
+
+  init()
+  draw()
+
+  window.addEventListener('resize', resize)
+  onBeforeUnmount(() => {
+    cancelAnimationFrame(animationId)
+    window.removeEventListener('resize', resize)
+  })
+})
 </script>
 
 <style scoped>
@@ -207,6 +328,48 @@ const features = [
   to { background-position: 2rem 2rem; }
 }
 
+/* Particle canvas layer */
+.particle-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Diagonal light beam sweep */
+.light-beam {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.light-beam::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 40%;
+  height: 200%;
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.03) 45%,
+    rgba(212, 168, 67, 0.04) 50%,
+    rgba(255, 255, 255, 0.03) 55%,
+    transparent 60%
+  );
+  animation: beam-sweep 8s ease-in-out infinite;
+}
+
+@keyframes beam-sweep {
+  0%, 100% { transform: translateX(-20%) rotate(15deg); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  50% { transform: translateX(320%) rotate(15deg); }
+}
+
 /* Content */
 .left-content {
   position: relative;
@@ -233,10 +396,9 @@ const features = [
 .brand-icon {
   position: relative;
   z-index: 1;
-  font-family: var(--font-serif);
-  font-size: 1.75rem;
-  color: var(--gold-light);
-  font-weight: 700;
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: contain;
 }
 
 .brand-ring {
