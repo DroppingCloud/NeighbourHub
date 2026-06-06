@@ -25,6 +25,12 @@ public class ProxyRelation {
 
     private Long targetProfileId;
 
+    @TableField(exist = false)
+    private String targetProfileName;
+
+    @TableField(exist = false)
+    private String proxyUserName;
+
     private String relation;
 
     private String authorizedActions;
@@ -38,9 +44,4 @@ public class ProxyRelation {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 
-    @TableField(exist = false)
-    private String proxyUserName;
-
-    @TableField(exist = false)
-    private String targetProfileName;
 }

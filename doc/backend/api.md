@@ -61,8 +61,12 @@
 
 ## 家属绑定
 
-- `POST /api/proxy/bind`：创建家属/代理授权关系。请求体：`targetUserId`、`targetProfileId`、`relation`、`authorizedActions`。至少填写 `targetUserId` 或 `targetProfileId`。
+- `POST /api/proxy/bind`：创建家属/代理授权关系。仅管理员可直接绑定。请求体：`targetUserId`、`targetProfileId`、`relation`、`authorizedActions`。至少填写 `targetUserId` 或 `targetProfileId`。
+- `POST /api/proxy/apply`：发起家属绑定申请。请求体：`realName`、`idCard`、`relation`、`authorizedActions`。
 - `GET /api/proxy/list`：查询当前登录用户作为代理人的授权关系列表。
+- `GET /api/proxy/pending-requests`：查询当前登录用户作为被代理人的待确认绑定申请。
+- `PUT /api/proxy/{id}/confirm`：确认当前登录用户作为被代理人的绑定申请。
+- `PUT /api/proxy/{id}/reject`：拒绝当前登录用户作为被代理人的绑定申请。
 - `PUT /api/proxy/{id}/revoke`：撤销当前登录用户名下的一条授权关系，状态更新为 `revoked`。
 
 ## 管理后台
