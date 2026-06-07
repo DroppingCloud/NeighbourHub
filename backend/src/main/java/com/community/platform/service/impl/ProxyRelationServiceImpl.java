@@ -11,9 +11,11 @@ import com.community.platform.entity.User;
 import com.community.platform.mapper.ProxyRelationMapper;
 import com.community.platform.mapper.ResidentProfileMapper;
 import com.community.platform.mapper.UserMapper;
+import com.community.platform.common.utils.EncryptionUtils;
 import com.community.platform.service.NoticeService;
 import com.community.platform.service.ProxyRelationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -35,12 +37,25 @@ public class ProxyRelationServiceImpl implements ProxyRelationService {
     private final UserMapper userMapper;
     private final NoticeService noticeService;
 
+    @Value("${security.id-card-key:default-id-card-key-please-change}")
+    private String idCardKey;
+
     @Override
     @Transactional
     public Long apply(Long proxyUserId, ProxyApplyDTO dto) {
+        String encryptedIdCard = EncryptionUtils.encrypt(dto.getIdCard(), idCardKey);
         ResidentProfile profile = residentProfileMapper.selectOne(new LambdaQueryWrapper<ResidentProfile>()
                 .eq(ResidentProfile::getRealName, dto.getRealName())
-                .eq(ResidentProfile::getIdCard, dto.getIdCard()));
+                .eq(ResidentProfile::getIdCard, encryptedIdCard));
+        if (profile == null) {
+            profile = residentProfileMapper.selectOne(new LambdaQueryWrapper<ResidentProfile>()
+                    .eq(ResidentProfile::getRealName, dto.getRealName())
+                    .eq(ResidentProfile::getIdCard, dto.getIdCard()));
+            if (profile != null) {
+                profile.setIdCard(encryptedIdCard);
+                residentProfileMapper.updateById(profile);
+            }
+        }
         if (profile == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "未找到匹配的居民信息");
         }

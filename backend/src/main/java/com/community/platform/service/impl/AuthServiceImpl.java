@@ -31,8 +31,10 @@ import com.community.platform.mapper.WorkOrderLogMapper;
 import com.community.platform.service.AuthService;
 import com.community.platform.vo.auth.LoginVO;
 import com.community.platform.vo.user.UserInfoVO;
+import com.community.platform.common.utils.EncryptionUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,6 +71,9 @@ public class AuthServiceImpl implements AuthService {
     private final NoticeMapper noticeMapper;
     private final WorkOrderMapper workOrderMapper;
     private final WorkOrderLogMapper workOrderLogMapper;
+
+    @Value("${security.id-card-key:default-id-card-key-please-change}")
+    private String idCardKey;
 
     @Override
     public LoginVO login(LoginDTO dto) {
@@ -200,16 +205,33 @@ public class AuthServiceImpl implements AuthService {
 
         // check id card uniqueness
         if (dto.getIdCard() != null && !dto.getIdCard().isBlank()) {
-            ResidentProfile existProfile = residentProfileMapper.selectOne(
-                new LambdaQueryWrapper<ResidentProfile>().eq(ResidentProfile::getIdCard, dto.getIdCard()));
+            ResidentProfile existProfile = findProfileByIdCard(dto.getIdCard());
             if (existProfile != null) throw new BusinessException(ResultCode.ACCOUNT_EXISTS, "身份证号已被注册");
         }
 
         ResidentProfile profile = new ResidentProfile();
         profile.setUserId(user.getUserId());
         profile.setRealName(dto.getRealName());
-        profile.setIdCard(dto.getIdCard());
+        profile.setIdCard(EncryptionUtils.encrypt(dto.getIdCard(), idCardKey));
         residentProfileMapper.insert(profile);
+    }
+
+    private ResidentProfile findProfileByIdCard(String idCard) {
+        if (idCard == null || idCard.isBlank()) {
+            return null;
+        }
+        String encrypted = EncryptionUtils.encrypt(idCard, idCardKey);
+        ResidentProfile profile = residentProfileMapper.selectOne(
+                new LambdaQueryWrapper<ResidentProfile>().eq(ResidentProfile::getIdCard, encrypted));
+        if (profile == null) {
+            profile = residentProfileMapper.selectOne(
+                    new LambdaQueryWrapper<ResidentProfile>().eq(ResidentProfile::getIdCard, idCard));
+            if (profile != null) {
+                profile.setIdCard(encrypted);
+                residentProfileMapper.updateById(profile);
+            }
+        }
+        return profile;
     }
 
     @Override
@@ -242,7 +264,7 @@ public class AuthServiceImpl implements AuthService {
         vo.setBookingServiceType(user.getBookingServiceType());
         if (profile != null) {
             vo.setRealName(profile.getRealName());
-            vo.setIdCard(profile.getIdCard());
+            vo.setIdCard(EncryptionUtils.decrypt(profile.getIdCard(), idCardKey));
             vo.setAddress(profile.getAddress());
             vo.setAge(profile.getAge());
             vo.setGender(profile.getGender());

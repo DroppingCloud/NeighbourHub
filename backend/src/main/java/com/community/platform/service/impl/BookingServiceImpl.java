@@ -201,7 +201,9 @@ public class BookingServiceImpl implements BookingService {
         }
 
         booking.setStatus("completed");
-        booking.setFeedback(feedback);
+        if (StringUtils.hasText(feedback)) {
+            booking.setFeedback(feedback);
+        }
         booking.setCompleteTime(now);
         serviceBookingMapper.updateById(booking);
 

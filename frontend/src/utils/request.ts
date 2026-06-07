@@ -11,15 +11,32 @@ const request = axios.create({
 
 let _lastToast = { msg: '', ts: 0 }
 
+// 辅助函数：标准化角色
+function normalizeRole(role: string) {
+  return role.replace(/^ROLE_/, '').toLowerCase()
+}
+
+// 登出并跳转登录页
+function clearLoginAndRedirect(message: string) {
+  const authStore = useAuthStore()
+  authStore.logout()
+  ElMessage.error(message)
+  if (router.currentRoute.value.path !== '/login') {
+    router.replace('/login')
+  }
+}
+
+// 请求拦截器
 request.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
+    const authStore = useAuthStore()
+    // ✅ 修改点：从 authStore 获取 token（自动兼容 localStorage 和 sessionStorage）
+    const token = authStore.token
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    // 家属代办：如果当前有代办目标，自动添加 _proxyFor 参数
-    // 可以通过设置请求头 `X-Skip-Proxy: true` 来跳过该自动添加（用于通知等严格针对登录用户的 API）
-    const authStore = useAuthStore()
+
+    // 家属代办逻辑（保持不变）
     const proxyStore = useProxyStore()
     const skipProxy = config.headers && (config.headers as any)['X-Skip-Proxy'] === 'true'
     const role = normalizeRole(authStore.userInfo?.role || '')
@@ -31,7 +48,6 @@ request.interceptors.request.use(
     }
 
     if (role === 'family' && currentTarget && targetStillValid && !skipProxy) {
-      // 后端统一通过 @RequestParam("_proxyFor") 读取代办目标居民档案 ID。
       config.params = { ...config.params, _proxyFor: currentTarget.profileId }
     }
     return config
@@ -39,20 +55,7 @@ request.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-function normalizeRole(role: string) {
-  return role.replace(/^ROLE_/, '').toLowerCase()
-}
-
-
-function clearLoginAndRedirect(message: string) {
-  const authStore = useAuthStore()
-  authStore.logout()
-  ElMessage.error(message)
-  if (router.currentRoute.value.path !== '/login') {
-    router.replace('/login')
-  }
-}
-
+// 响应拦截器
 request.interceptors.response.use(
   (response) => {
     const { code, message, data } = response.data

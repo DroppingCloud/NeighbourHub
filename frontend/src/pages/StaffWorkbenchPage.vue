@@ -18,40 +18,28 @@
       </div>
     </div>
 
-    <!-- <div class="stats-row">
-      <div v-if="isApplicationStaff" class="stat-card" @click="goTo('/workorder', 'pending')">
-        <div class="stat-icon warning"><el-icon><Tickets /></el-icon></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ pendingWorkOrders }}</div>
-          <div class="stat-label">待处理工单</div>
-          <div class="stat-trend">需及时处理</div>
+    <!-- 服务得分模块（仅服务调度人员可见，且放在快捷操作上方） -->
+    <div v-if="isBookingStaff" class="score-section">
+      <div class="score-card">
+        <div class="score-icon">
+          <el-icon><StarFilled /></el-icon>
+        </div>
+        <div class="score-main">
+          <div class="score-title">服务综合评分</div>
+          <div class="score-average">
+            <span class="score-number">{{ scoreLabel === '暂无评分' ? '—' : scoreLabel }}</span>
+            <span class="score-unit">分</span>
+          </div>
+          <div class="score-stars">
+            <el-rate :model-value="bookingRatingAverage" disabled show-score :text-color="'#ff9900'" />
+          </div>
+        </div>
+        <div class="score-count">
+          <el-icon><User /></el-icon>
+          <span>{{ bookingRatingCount }} 次评价</span>
         </div>
       </div>
-      <div v-if="isApplicationStaff" class="stat-card" @click="goTo('/workorder', 'processing')">
-        <div class="stat-icon primary"><el-icon><Loading /></el-icon></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ processingWorkOrders }}</div>
-          <div class="stat-label">处理中工单</div>
-          <div class="stat-trend">进行中</div>
-        </div>
-      </div>
-      <div v-if="isBookingStaff" class="stat-card" @click="goTo('/staff/booking', 'pending')">
-        <div class="stat-icon info"><el-icon><Calendar /></el-icon></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ pendingDispatches }}</div>
-          <div class="stat-label">待调度预约</div>
-          <div class="stat-trend">需派单</div>
-        </div>
-      </div>
-      <div v-if="isBookingStaff" class="stat-card" @click="goTo('/staff/booking', 'in_progress')">
-        <div class="stat-icon success"><el-icon><Check /></el-icon></div>
-        <div class="stat-info">
-          <div class="stat-value">{{ processingServices }}</div>
-          <div class="stat-label">服务中</div>
-          <div class="stat-trend">进行中</div>
-        </div>
-      </div>
-    </div> -->
+    </div>
 
     <div class="quick-actions-section">
       <h3 class="section-title">快捷操作</h3>
@@ -115,8 +103,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tickets, Loading, Calendar, Check, Position, Bell } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox, ElRate } from 'element-plus'
+import { Tickets, Loading, Calendar, Check, Position, Bell, StarFilled, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { getWorkOrderList, auditWorkOrder, type WorkOrderVO } from '@/api/workOrder'
 import { assignBooking, type BookingVO, getStaffBookingList } from '@/api/booking'
@@ -127,12 +115,16 @@ const authStore = useAuthStore()
 
 const userInfo = computed(() => authStore.userInfo)
 const staffType = computed(() => authStore.userInfo?.staffType || 'application')
+const currentStaffUserId = computed(() => Number(authStore.userInfo?.userId || 0))
 const isApplicationStaff = computed(() => staffType.value === 'application')
 const isBookingStaff = computed(() => staffType.value === 'booking')
 const workOrders = ref<WorkOrderVO[]>([])
 const bookings = ref<BookingVO[]>([])
 const loading = ref(false)
 const unreadCount = ref(0)
+const bookingRatingAverage = ref(0)
+const bookingRatingCount = ref(0)
+const scoreLabel = computed(() => bookingRatingCount.value > 0 ? bookingRatingAverage.value.toFixed(1) : '暂无评分')
 
 const pendingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'pending').length)
 const processingWorkOrders = computed(() => workOrders.value.filter(o => o.status === 'processing').length)
@@ -181,11 +173,15 @@ async function loadWorkbench() {
       bookings.value = []
       unreadCount.value = Number(count || 0)
     } else if (isBookingStaff.value) {
-      const [bookingPage, count] = await Promise.all([
-        getStaffBookingList(1, 100),
+      const [bookingPage, completedPage, count] = await Promise.all([
+        getStaffBookingList(1, 100, undefined, currentStaffUserId.value),
+        currentStaffUserId.value > 0
+          ? getStaffBookingList(1, 1000, 'completed', currentStaffUserId.value)
+          : Promise.resolve({ records: [] }),
         unreadPromise
       ])
       bookings.value = getRows<BookingVO>(bookingPage)
+      updateBookingRatingStats(getRows<BookingVO>(completedPage))
       workOrders.value = []
       unreadCount.value = Number(count || 0)
     }
@@ -197,6 +193,26 @@ async function loadWorkbench() {
 function getRows<T>(page: any): T[] {
   if (Array.isArray(page)) return page
   return page?.records || page?.list || page?.rows || []
+}
+
+function parseRatingFromFeedback(feedback?: string): number | null {
+  if (!feedback) return null
+  const trimmed = feedback.trim()
+  const numericMatch = trimmed.match(/^(\d+)\s*星/)
+  if (numericMatch) return Number(numericMatch[1])
+  const starMatch = trimmed.match(/^(★+)/)
+  if (starMatch) return starMatch[1].length
+  return null
+}
+
+function updateBookingRatingStats(completedBookings: BookingVO[]) {
+  const ratings = completedBookings
+    .map(booking => parseRatingFromFeedback(booking.feedback))
+    .filter((rating): rating is number => rating !== null)
+  bookingRatingCount.value = ratings.length
+  bookingRatingAverage.value = ratings.length
+    ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+    : 0
 }
 
 function goTo(path: string, tab?: string) {
@@ -303,85 +319,90 @@ async function quickDispatch(booking: BookingVO) {
   margin-top: 0.25rem;
 }
 
-/* .stats-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));
-  gap: 1.25rem;
+/* 服务得分卡片样式（优化后） */
+.score-section {
   margin-bottom: 1.75rem;
-} */
+}
 
-.stat-card {
-  background: var(--card-bg);
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.25rem;
+.score-card {
+  background: linear-gradient(135deg, #fff9e8 0%, #fff4dd 100%);
+  border-radius: 1.5rem;
+  padding: 1.5rem 2rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  box-shadow: var(--shadow-sm);
-  cursor: pointer;
-  transition: all 0.3s;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  box-shadow: 0 8px 20px rgba(212, 168, 67, 0.12);
+  border: 1px solid rgba(212, 168, 67, 0.3);
+  transition: transform 0.2s;
 }
 
-.stat-card:hover {
-  transform: translateY(-0.125rem);
-  box-shadow: var(--shadow-md);
+.score-card:hover {
+  transform: translateY(-2px);
 }
 
-.stat-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 1rem;
+.score-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  background: rgba(212, 168, 67, 0.15);
+  border-radius: 3rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  flex: 0 0 auto;
+  font-size: 2rem;
+  color: var(--gold);
 }
 
-.stat-icon.warning,
-.action-icon.warning {
-  background: rgba(230, 126, 34, 0.1);
-  color: #e67e22;
-}
-
-.stat-icon.primary {
-  background: rgba(45, 53, 97, 0.1);
-  color: #2d3561;
-}
-
-.stat-icon.info,
-.action-icon.info {
-  background: rgba(52, 152, 219, 0.1);
-  color: #3498db;
-}
-
-.stat-icon.success {
-  background: rgba(39, 174, 96, 0.1);
-  color: #27ae60;
-}
-
-.stat-info {
+.score-main {
   flex: 1;
-  min-width: 0;
+  min-width: 160px;
 }
 
-.stat-card .stat-value {
-  font-size: 1.75rem;
+.score-title {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  margin-bottom: 0.25rem;
+}
+
+.score-average {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.score-number {
+  font-size: 2.5rem;
   font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
+  color: var(--gold-dark, #b88a2c);
+  line-height: 1;
 }
 
-.stat-card .stat-label {
-  font-size: 0.8125rem;
+.score-unit {
+  font-size: 1rem;
   color: var(--text-muted);
+}
+
+.score-stars {
   margin-top: 0.25rem;
 }
 
-.stat-trend {
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-  margin-top: 0.25rem;
+.score-count {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  background: rgba(0,0,0,0.03);
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  font-size: 0.875rem;
+}
+
+.score-count .el-icon {
+  font-size: 1rem;
+  color: var(--gold);
 }
 
 .quick-actions-section {
@@ -428,6 +449,16 @@ async function quickDispatch(booking: BookingVO) {
   font-size: 1.25rem;
   background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+.action-icon.warning {
+  background: rgba(230, 126, 34, 0.1);
+  color: #e67e22;
+}
+
+.action-icon.info {
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
 }
 
 .action-badge {
@@ -497,6 +528,21 @@ async function quickDispatch(booking: BookingVO) {
 
   .welcome-banner {
     padding: 1.5rem;
+  }
+
+  .score-card {
+    padding: 1rem 1.25rem;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .score-icon {
+    margin: 0 auto;
+  }
+
+  .score-count {
+    justify-content: center;
   }
 }
 </style>

@@ -21,9 +21,9 @@
           :key="star"
           class="star"
           :class="{ active: star <= (hoverStar || rating) }"
-          @click="rating = star"
-          @mouseenter="hoverStar = star"
-          @mouseleave="hoverStar = 0"
+          @click="!isReadOnly && (rating = star)"
+          @mouseenter="!isReadOnly && (hoverStar = star)"
+          @mouseleave="!isReadOnly && (hoverStar = 0)"
         >
           <el-icon>
             <StarFilled v-if="star <= (hoverStar || rating)" />
@@ -43,7 +43,8 @@
           type="button"
           class="tag-item"
           :class="{ active: selectedTags.includes(tag) }"
-          @click="toggleTag(tag)"
+          @click="!isReadOnly && toggleTag(tag)"
+          :disabled="isReadOnly"
         >
           {{ tag }}
         </button>
@@ -59,12 +60,14 @@
         placeholder="请描述您的服务体验"
         maxlength="500"
         show-word-limit
+        :readonly="isReadOnly"
       />
     </div>
 
     <div class="action-buttons">
-      <el-button @click="router.back()" size="large">稍后评价</el-button>
+      <el-button @click="router.back()" size="large">返回</el-button>
       <el-button
+        v-if="!isReadOnly"
         type="primary"
         size="large"
         :loading="submitting"
@@ -78,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Star, StarFilled } from '@element-plus/icons-vue'
@@ -92,6 +95,14 @@ const hoverStar = ref(0)
 const selectedTags = ref<string[]>([])
 const feedbackContent = ref('')
 const submitting = ref(false)
+const routeMode = computed(() => String(route.query.mode || ''))
+const effectiveMode = computed(() => {
+  if (!hasActualFeedback(booking.value?.feedback)) {
+    return 'write'
+  }
+  return routeMode.value === 'view' || routeMode.value === 'read' ? routeMode.value : 'view'
+})
+const isReadOnly = computed(() => effectiveMode.value === 'view' || effectiveMode.value === 'read')
 
 const ratingLabels: Record<number, string> = {
   0: '请选择',
@@ -119,6 +130,12 @@ function toggleTag(tag: string) {
  * 或 "4星 专业规范 还不错" (无括号)
  * 或 "3星  【】 一般般" (无标签)
  */
+function hasActualFeedback(feedback?: string) {
+  if (!feedback) return false
+  const trimmed = feedback.trim()
+  return trimmed !== '工作人员确认服务完成'
+}
+
 function parseFeedback(feedbackStr: string): { rating: number; tags: string[]; content: string } {
   // 默认值
   let rating = 0
@@ -170,14 +187,14 @@ async function loadBooking() {
     const detail = await getBookingDetail(id)
     booking.value = detail
 
-    // 如果已有评价内容，解析并回填表单
-    if (detail.feedback) {
+    // 如果已有真实评价内容，解析并回填表单
+    if (hasActualFeedback(detail.feedback)) {
       const parsed = parseFeedback(detail.feedback)
       rating.value = parsed.rating
       selectedTags.value = parsed.tags
       feedbackContent.value = parsed.content
     } else {
-      // 无历史评价时重置表单（可选）
+      // 无历史评价时重置表单
       rating.value = 0
       selectedTags.value = []
       feedbackContent.value = ''

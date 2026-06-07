@@ -8,7 +8,12 @@
     <el-tabs v-model="activeTab">
       <el-tab-pane label="申请进度" name="application">
         <div v-loading="loadingApplications">
-          <div v-for="app in applications" :key="app.applicationId" class="progress-card">
+          <div
+            v-for="app in applications"
+            :key="app.applicationId"
+            class="progress-card"
+            :class="`status-${getStatusTheme(app.status)}`"
+          >
             <div class="card-header">
               <span class="title">{{ app.itemName }}</span>
               <el-tag :type="getStatusType(app.status)">{{ app.statusLabel || getStatusText(app.status) }}</el-tag>
@@ -21,15 +26,25 @@
                 class="step-item"
                 :class="{
                   active: index + 1 <= getStepActive(app.status),
-                  completed: index + 1 < getStepActive(app.status)
+                  completed: index + 1 < getStepActive(app.status),
+                  'theme-active': true
                 }"
+                :data-status="getStatusTheme(app.status)"
               >
                 <div class="step-icon">
                   <el-icon v-if="index + 1 < getStepActive(app.status)"><Check /></el-icon>
                   <span v-else class="step-number">{{ index + 1 }}</span>
                 </div>
                 <div class="step-title">{{ step }}</div>
-                <div v-if="index < stepTitles.length - 1" class="step-line" :class="{ active: index + 1 < getStepActive(app.status) }"></div>
+                <div
+                  v-if="index < stepTitles.length - 1"
+                  class="step-line"
+                  :class="{
+                    active: index + 1 < getStepActive(app.status),
+                    'theme-line': true
+                  }"
+                  :data-status="getStatusTheme(app.status)"
+                ></div>
               </div>
             </div>
 
@@ -41,7 +56,12 @@
 
       <el-tab-pane label="预约进度" name="booking">
         <div v-loading="loadingBookings">
-          <div v-for="booking in bookings" :key="booking.bookingId" class="progress-card">
+          <div
+            v-for="booking in bookings"
+            :key="booking.bookingId"
+            class="progress-card"
+            :class="`status-${getBookingStatusTheme(booking.status)}`"
+          >
             <div class="card-header">
               <span class="title">{{ booking.serviceTypeLabel }}</span>
               <el-tag :type="getBookingStatusType(booking.status)">{{ booking.statusLabel || getBookingStatusText(booking.status) }}</el-tag>
@@ -54,15 +74,25 @@
                 class="step-item"
                 :class="{
                   active: index + 1 <= getBookingStepActive(booking.status),
-                  completed: index + 1 < getBookingStepActive(booking.status)
+                  completed: index + 1 < getBookingStepActive(booking.status),
+                  'theme-active': true
                 }"
+                :data-status="getBookingStatusTheme(booking.status)"
               >
                 <div class="step-icon">
                   <el-icon v-if="index + 1 < getBookingStepActive(booking.status)"><Check /></el-icon>
                   <span v-else class="step-number">{{ index + 1 }}</span>
                 </div>
                 <div class="step-title">{{ step }}</div>
-                <div v-if="index < bookingStepTitles.length - 1" class="step-line" :class="{ active: index + 1 < getBookingStepActive(booking.status) }"></div>
+                <div
+                  v-if="index < bookingStepTitles.length - 1"
+                  class="step-line"
+                  :class="{
+                    active: index + 1 < getBookingStepActive(booking.status),
+                    'theme-line': true
+                  }"
+                  :data-status="getBookingStatusTheme(booking.status)"
+                ></div>
               </div>
             </div>
 
@@ -76,12 +106,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { Check } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getApplicationList, type ApplicationVO } from '@/api/application'
 import { getBookingList, type BookingVO } from '@/api/booking'
-import { watch } from 'vue'
 import { useProxyStore } from '@/stores/proxy'
 
 const activeTab = ref('application')
@@ -131,6 +160,19 @@ function getPageRows<T>(page: any): T[] {
   return page?.records || page?.list || page?.rows || []
 }
 
+// 申请状态 - 主题色
+function getStatusTheme(status: string): string {
+  const map: Record<string, string> = {
+    pending: 'warning',      // 待审核 - 橙色
+    reviewing: 'primary',    // 审核中 - 蓝色
+    supplement: 'danger',    // 待补件 - 红色
+    approved: 'success',     // 已通过 - 绿色
+    completed: 'success',    // 已完成 - 绿色
+    rejected: 'danger'       // 已驳回 - 红色
+  }
+  return map[status] || 'info'
+}
+
 function getStatusType(status: string) {
   const map: Record<string, string> = {
     pending: 'warning',
@@ -165,6 +207,19 @@ function getStepActive(status: string): number {
     rejected: 4
   }
   return map[status] || 0
+}
+
+// 预约状态 - 主题色
+function getBookingStatusTheme(status: string): string {
+  const map: Record<string, string> = {
+    pending: 'warning',      // 待调度 - 橙色
+    confirmed: 'primary',    // 已确认 - 蓝色
+    in_progress: 'primary',  // 服务中 - 蓝色
+    processing: 'primary',
+    completed: 'success',    // 已完成 - 绿色
+    cancelled: 'info'        // 已取消 - 灰色
+  }
+  return map[status] || 'info'
 }
 
 function getBookingStatusType(status: string) {
@@ -224,12 +279,32 @@ function getBookingStepActive(status: string): number {
   color: var(--text-muted);
 }
 
+/* 卡片基础样式 + 左侧边框颜色 */
 .progress-card {
   background: var(--card-bg);
   border-radius: var(--radius-md);
   padding: 1.25rem;
   margin-bottom: 1rem;
   box-shadow: var(--shadow-sm);
+  border-left: 4px solid transparent;
+  transition: all 0.2s;
+}
+
+/* 状态主题色左侧边框 */
+.progress-card.status-warning {
+  border-left-color: #e6a23c;
+}
+.progress-card.status-primary {
+  border-left-color: #409eff;
+}
+.progress-card.status-success {
+  border-left-color: #67c23a;
+}
+.progress-card.status-danger {
+  border-left-color: #f56c6c;
+}
+.progress-card.status-info {
+  border-left-color: #909399;
 }
 
 .card-header {
@@ -248,6 +323,7 @@ function getBookingStepActive(status: string): number {
   word-break: break-word;
 }
 
+/* 自定义步骤条布局 */
 .custom-steps {
   display: flex;
   align-items: center;
@@ -281,18 +357,6 @@ function getBookingStepActive(status: string): number {
   z-index: 2;
 }
 
-.step-item.active .step-icon {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: #fff;
-}
-
-.step-item.completed .step-icon {
-  background: var(--jade);
-  border-color: var(--jade);
-  color: #fff;
-}
-
 .step-title {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -316,8 +380,66 @@ function getBookingStepActive(status: string): number {
   z-index: 1;
 }
 
+/* 动态主题色：根据 data-status 设置已完成/激活的颜色 */
+.step-item.completed .step-icon {
+  background: #67c23a;
+  border-color: #67c23a;
+  color: #fff;
+}
+.step-item.active .step-icon {
+  background: #409eff;
+  border-color: #409eff;
+  color: #fff;
+}
+
+/* 当状态为 warning 时覆盖激活和完成颜色 */
+.step-item[data-status="warning"].completed .step-icon,
+.step-item[data-status="warning"] .step-line.active {
+  background: #e6a23c;
+  border-color: #e6a23c;
+}
+.step-item[data-status="warning"].active .step-icon {
+  background: #e6a23c;
+  border-color: #e6a23c;
+}
+
+/* 状态 danger */
+.step-item[data-status="danger"].completed .step-icon,
+.step-item[data-status="danger"] .step-line.active {
+  background: #f56c6c;
+  border-color: #f56c6c;
+}
+.step-item[data-status="danger"].active .step-icon {
+  background: #f56c6c;
+  border-color: #f56c6c;
+}
+
+/* 状态 success */
+.step-item[data-status="success"].completed .step-icon,
+.step-item[data-status="success"] .step-line.active {
+  background: #67c23a;
+  border-color: #67c23a;
+}
+.step-item[data-status="success"].active .step-icon {
+  background: #67c23a;
+  border-color: #67c23a;
+}
+
+/* 状态 info */
+.step-item[data-status="info"].completed .step-icon,
+.step-item[data-status="info"] .step-line.active {
+  background: #909399;
+  border-color: #909399;
+}
+.step-item[data-status="info"].active .step-icon {
+  background: #909399;
+  border-color: #909399;
+}
+
+/* 默认 primary（蓝色）已在上面定义，无需额外覆盖 */
+
 .step-line.active {
-  background: var(--jade);
+  background: #409eff;
 }
 
 .remark,
@@ -337,7 +459,6 @@ function getBookingStepActive(status: string): number {
     gap: 1rem;
     justify-content: flex-start;
   }
-
   .step-item {
     min-width: 5rem;
   }

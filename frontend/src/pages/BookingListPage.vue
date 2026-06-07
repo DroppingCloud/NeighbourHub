@@ -18,9 +18,14 @@
         :key="booking.bookingId" 
         :data-id="booking.bookingId"
         class="booking-card"
-        :class="{ 'highlight-flash': shouldHighlight(booking.bookingId), 'expanded': expandedIds.has(booking.bookingId) }"
+        :class="[
+          `status-${booking.status}`,
+          { 'is-proxy': booking.isProxy },
+          { 'expanded': expandedIds.has(booking.bookingId) },
+          { 'highlight-flash': shouldHighlight(booking.bookingId) }
+        ]"
       >
-        <!-- 折叠头部（始终显示） -->
+        <!-- 折叠头部 -->
         <div class="card-header" @click="toggleExpand(booking.bookingId)">
           <div class="service-info">
             <span class="service-name">{{ booking.serviceTypeLabel || booking.serviceType }}</span>
@@ -40,7 +45,7 @@
           </div>
         </div>
 
-        <!-- 折叠内容（点击后展开） -->
+        <!-- 折叠内容 -->
         <div v-show="expandedIds.has(booking.bookingId)" class="card-body">
           <div class="info-row">
             <span class="label">预约时间</span>
@@ -71,9 +76,9 @@
               v-if="booking.status === 'completed'"
               type="primary"
               size="small"
-              @click.stop="goToFeedback(booking.bookingId)"
+              @click.stop="goToFeedback(booking.bookingId, booking.feedback)"
             >
-              去评价
+              {{ booking.feedback && booking.feedback.trim() ? '查看评价' : '去评价' }}
             </el-button>
           </div>
         </div>
@@ -95,20 +100,17 @@ const route = useRoute()
 const loading = ref(false)
 const bookings = ref<BookingVO[]>([])
 const highlightId = ref<string | null>(null)
-const expandedIds = ref<Set<number>>(new Set()) // 存储展开的预约ID
+const expandedIds = ref<Set<number>>(new Set())
 
-// 获取需要高亮的ID
 const getHighlightId = () => {
   const id = route.query.highlightId
   return id ? String(id) : null
 }
 
-// 判断是否需要高亮
 const shouldHighlight = (id: number) => {
   return highlightId.value === String(id)
 }
 
-// 清除高亮
 const clearHighlight = () => {
   highlightId.value = null
   router.replace({ path: '/booking/list', query: {} })
@@ -117,14 +119,12 @@ const clearHighlight = () => {
   })
 }
 
-// 切换折叠状态
 const toggleExpand = (id: number) => {
   if (expandedIds.value.has(id)) {
     expandedIds.value.delete(id)
   } else {
     expandedIds.value.add(id)
   }
-  // 触发响应式更新
   expandedIds.value = new Set(expandedIds.value)
 }
 
@@ -157,18 +157,17 @@ async function cancel(id: number) {
   clearHighlight()
 }
 
-function goToFeedback(id: number) {
-  router.push({ path: '/service-feedback', query: { bookingId: id, mode: 'write' } })
+function goToFeedback(id: number, feedback?: string) {
+  const hasFeedback = feedback?.trim() && feedback.trim() !== '工作人员确认服务完成'
+  router.push({ path: '/service-feedback', query: { bookingId: id, mode: hasFeedback ? 'view' : 'write' } })
 }
 
-// 滚动到高亮项并自动展开
 async function scrollToHighlight() {
   const targetId = getHighlightId()
   if (!targetId) return
   
   highlightId.value = targetId
   const idNum = Number(targetId)
-  // 自动展开高亮项
   expandedIds.value.add(idNum)
   expandedIds.value = new Set(expandedIds.value)
   
@@ -215,7 +214,6 @@ onMounted(async () => {
   color: var(--text-muted);
 }
 
-/* 高亮提示条 */
 .highlight-tip {
   display: flex;
   align-items: center;
@@ -241,6 +239,7 @@ onMounted(async () => {
   min-height: 12rem;
 }
 
+/* 卡片基础样式 - 左边框加粗至8px */
 .booking-card {
   background: var(--card-bg);
   border-radius: var(--radius-md);
@@ -248,9 +247,50 @@ onMounted(async () => {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  border-left: 8px solid transparent;
 }
 
-/* 折叠头部（始终显示） */
+/* 状态颜色标识（左边框 + 浅色背景） */
+.booking-card.status-cancelled {
+  border-left-color: #f56c6c;
+  background: #fff0f0;
+}
+
+.booking-card.status-completed {
+  border-left-color: #67c23a;
+  background: #f0f9eb;
+}
+
+.booking-card.status-in_progress {
+  border-left-color: #e6a23c;
+  background: #fdf6ec;
+}
+
+.booking-card.status-confirmed {
+  border-left-color: #409eff;
+  background: #ecf5ff;
+}
+
+.booking-card.status-pending {
+  border-left-color: #909399;
+  background: #f4f4f5;
+}
+
+/* 代办预约 - 更醒目的蓝色边框 + 额外阴影 + 特殊背景 */
+.booking-card.is-proxy {
+  border-left-color: #3b82f6;
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.3), inset 0 0 0 1px rgba(59,130,246,0.1);
+  background: #f0f7ff;
+}
+
+/* 已取消的代办：保持红色优先（覆盖代办样式） */
+.booking-card.status-cancelled.is-proxy {
+  border-left-color: #f56c6c;
+  background: #fff0f0;
+  box-shadow: none;
+}
+
+/* 折叠头部 */
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -331,14 +371,15 @@ onMounted(async () => {
   margin-top: 1rem;
 }
 
-/* 高亮闪烁动画 (保持不变) */
+/* 高亮闪烁动画（覆盖状态颜色） */
 .booking-card.highlight-flash {
   animation: highlightBlink 0.5s ease-in-out 3, pulseGlow 1.5s ease-out;
   background: linear-gradient(90deg,
     rgba(212, 168, 67, 0.08) 0%,
     rgba(212, 168, 67, 0.2) 50%,
     rgba(212, 168, 67, 0.08) 100%);
-  border-left: 3px solid var(--gold);
+  border-left-color: var(--gold) !important;
+  border-left-width: 8px;
 }
 
 @keyframes highlightBlink {
