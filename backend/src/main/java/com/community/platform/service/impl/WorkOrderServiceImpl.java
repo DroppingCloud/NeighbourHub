@@ -244,12 +244,12 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         workOrderLogMapper.insert(log);
 
         noticeService.sendNotice(
-                assignee.getUserId(),
+                staffUserId,
                 "新的工单已分配",
-                "系统已将一条事项办理工单分配给您，请及时处理。工单号：" + orderId,
+                "系统已将一条事项办理工单分配给您，请及时处理。工单号：" + order.getOrderId(),
                 "system",
                 "work_order",
-                orderId);
+                order.getOrderId());
     }
 
     @Override
