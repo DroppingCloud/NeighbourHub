@@ -53,7 +53,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private static final Long BUILT_IN_ADMIN_ID = 0L;
+    private static final Long BUILT_IN_ADMIN_ID = 1L;
     private static final String BUILT_IN_ADMIN_USERNAME = "admin";
     private static final String BUILT_IN_ADMIN_PASSWORD = "123456";
 
@@ -220,15 +220,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public UserInfoVO getMe(Long userId) {
-        if (BUILT_IN_ADMIN_ID.equals(userId)) {
-            UserInfoVO vo = new UserInfoVO();
-            vo.setUserId(BUILT_IN_ADMIN_ID);
-            vo.setUsername(BUILT_IN_ADMIN_USERNAME);
-            vo.setRealName("系统管理员");
-            vo.setRoles(List.of("ROLE_ADMIN"));
-            return vo;
-        }
-
         User user = userMapper.selectById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.ACCOUNT_NOT_EXISTS);
