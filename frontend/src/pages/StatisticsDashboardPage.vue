@@ -322,62 +322,78 @@ function renderCharts() {
     pending: '待确认', confirmed: '已确认', in_progress: '进行中',
     completed: '已完成', cancelled: '已取消'
   }
-
-  // 为每种服务类型分配一个主色调，状态通过透明度区分
-  const serviceTypeColors: Record<string, { h: number; s: number; l: number }> = {
-    dining:     { h: 210, s: 70, l: 55 },   // 蓝色系
-    accompany:  { h: 155, s: 55, l: 42 },   // 绿色系
-    home_visit: { h: 38,  s: 80, l: 55 }    // 金色系
-  }
-  // 状态映射到明度偏移：越靠前的状态越深
-  const statusLightness: Record<string, number> = {
-    pending: 0, confirmed: 8, in_progress: -5, completed: 16, cancelled: 28
+  const statusColors: Record<string, string> = {
+    pending: palette.orange,
+    confirmed: palette.blue,
+    in_progress: palette.purple,
+    completed: palette.jade,
+    cancelled: '#adb5bd'
   }
 
-  function getServiceColor(type: string, status: string): string {
-    const base = serviceTypeColors[type] || { h: 270, s: 50, l: 50 }
-    const offset = statusLightness[status] ?? 12
-    return `hsl(${base.h}, ${base.s}%, ${base.l + offset}%)`
-  }
+  // 按服务类型聚合数据，构建堆叠柱状图
+  const serviceTypes = ['dining', 'accompany', 'home_visit']
+  const statuses = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled']
 
-  // 先按服务类型分组排序，同类放在一起
-  const sortedServiceData = [...serviceStats.value].sort((a, b) => {
-    const typeOrder = ['dining', 'accompany', 'home_visit']
-    return typeOrder.indexOf(a.serviceType || '') - typeOrder.indexOf(b.serviceType || '')
-  })
+  // 构建数据矩阵: statusCountMap[status][serviceType] = count
+  const statusCountMap: Record<string, Record<string, number>> = {}
+  for (const s of statuses) {
+    statusCountMap[s] = {}
+    for (const t of serviceTypes) {
+      statusCountMap[s][t] = 0
+    }
+  }
+  for (const row of serviceStats.value) {
+    const t = row.serviceType || ''
+    const s = row.status || ''
+    if (statusCountMap[s] && statusCountMap[s][t] !== undefined) {
+      statusCountMap[s][t] = toNumber(row.count)
+    }
+  }
 
   serviceChart?.setOption({
     tooltip: {
-      trigger: 'item',
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
       backgroundColor: 'rgba(26, 26, 46, 0.92)',
       borderColor: 'transparent',
-      textStyle: { color: '#fff', fontSize: 12 },
-      formatter: (params: any) => {
-        return `<strong>${params.name}</strong><br/>数量: ${params.value}（${params.percent}%）`
-      }
+      textStyle: { color: '#fff', fontSize: 12 }
     },
     legend: {
       bottom: 8,
       textStyle: { color: '#9090aa', fontSize: 11 },
-      itemWidth: 10,
+      itemWidth: 14,
       itemHeight: 10,
-      itemGap: 12
+      itemGap: 16
     },
-    series: [{
-      type: 'pie',
-      radius: ['36%', '64%'],
-      center: ['50%', '42%'],
-      label: { show: false },
-      emphasis: {
-        label: { show: true, fontSize: 12, fontWeight: 600 },
-        itemStyle: { shadowBlur: 12, shadowColor: 'rgba(0,0,0,0.15)' }
+    grid: { top: 20, left: 12, right: 20, bottom: 48, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: serviceTypes.map(t => serviceTypeMap[t] || t),
+      axisLine: { lineStyle: { color: 'rgba(26,26,46,0.1)' } },
+      axisLabel: { color: '#5a5a7a', fontSize: 12, fontWeight: 500 },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      splitLine: { lineStyle: { color: 'rgba(26,26,46,0.06)', type: 'dashed' } },
+      axisLabel: { color: '#9090aa', fontSize: 11 },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    series: statuses.map(s => ({
+      name: statusMap[s] || s,
+      type: 'bar',
+      stack: 'total',
+      barWidth: 36,
+      data: serviceTypes.map(t => statusCountMap[s][t]),
+      itemStyle: {
+        color: statusColors[s] || '#ccc',
+        borderRadius: 0
       },
-      data: sortedServiceData.map(row => ({
-        name: `${serviceTypeMap[row.serviceType || ''] || row.serviceType || '未知'}·${statusMap[row.status || ''] || row.status || '未知'}`,
-        value: toNumber(row.count),
-        itemStyle: { color: getServiceColor(row.serviceType || '', row.status || '') }
-      }))
-    }]
+      emphasis: {
+        itemStyle: { shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.12)' }
+      }
+    }))
   })
 }
 

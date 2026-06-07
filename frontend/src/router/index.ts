@@ -127,6 +127,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '事项配置', requiresAuth: true, roles: ['admin', 'ROLE_ADMIN'] }
   },
   {
+    path: '/admin/workorder',
+    name: 'AdminWorkOrder',
+    component: () => import('@/pages/AdminWorkOrderPage.vue'),
+    meta: { title: '工单管理', requiresAuth: true, roles: ['admin', 'ROLE_ADMIN'] }
+  },
+  {
     path: '/admin/service-resource',
     name: 'ServiceResource',
     component: () => import('@/pages/ServiceResourcePage.vue'),

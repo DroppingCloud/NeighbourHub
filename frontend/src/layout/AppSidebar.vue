@@ -69,6 +69,10 @@
           <el-icon><Document /></el-icon>
           <span>事项配置</span>
         </el-menu-item>
+        <el-menu-item index="/admin/workorder">
+          <el-icon><Tickets /></el-icon>
+          <span>工单管理</span>
+        </el-menu-item>
         <!-- <el-menu-item index="/admin/service-resource">
           <el-icon><Calendar /></el-icon>
           <span>服务资源</span>

@@ -19,4 +19,5 @@ public interface WorkOrderService {
     void batchAudit(Long staffUserId, List<WorkOrderAuditDTO> audits);
     void updateStatusByApplicationId(Long applicationId, String status);
     Map<String, Long> getStats();
+    void delete(Long orderId);
 }

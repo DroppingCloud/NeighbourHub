@@ -56,4 +56,11 @@ public class WorkOrderController {
     public Result<List<WorkOrderLog>> logs(@PathVariable Long id) {
         return Result.success(workOrderService.getLogs(id));
     }
+
+    @Operation(summary = "删除工单（管理员）")
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        workOrderService.delete(id);
+        return Result.success();
+    }
 }

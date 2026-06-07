@@ -616,4 +616,24 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private long size(Integer pageSize) {
         return pageSize == null || pageSize < 1 ? 10 : pageSize;
     }
+
+    @Override
+    @Transactional
+    public void delete(Long orderId) {
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        if (currentUserId == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "未登录");
+        }
+        User currentUser = userMapper.selectById(currentUserId);
+        if (currentUser == null || !"admin".equals(currentUser.getRole())) {
+            throw new BusinessException(ResultCode.NO_PERMISSION, "仅管理员可删除工单");
+        }
+        WorkOrder order = workOrderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "工单不存在");
+        }
+        workOrderLogMapper.delete(new LambdaQueryWrapper<WorkOrderLog>()
+                .eq(WorkOrderLog::getOrderId, orderId));
+        workOrderMapper.deleteById(orderId);
+    }
 }

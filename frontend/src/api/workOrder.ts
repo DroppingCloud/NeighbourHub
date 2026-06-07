@@ -57,3 +57,6 @@ export const auditWorkOrder = (data: AuditRequest) =>
 
 export const getWorkOrderLogs = (id: number) =>
   request.get<any, WorkOrderLogVO[]>(`/api/workorder/${id}/logs`)
+
+export const deleteWorkOrder = (id: number) =>
+  request.delete<any, void>(`/api/workorder/${id}`)
