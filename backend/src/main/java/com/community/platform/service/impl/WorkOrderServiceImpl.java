@@ -108,10 +108,11 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 if (!"application".equals(currentUser.getStaffType())) {
                     wrapper.eq(WorkOrder::getStaffUserId, -1L);
                 } else {
-                wrapper.eq(WorkOrder::getStaffUserId, currentUserId);
-                if (currentUser.getCommunityId() != null) {
-                    wrapper.eq(WorkOrder::getCommunityId, currentUser.getCommunityId());
-                }
+                    wrapper.eq(WorkOrder::getStaffUserId, currentUserId);
+                    if (currentUser.getCommunityId() != null) {
+                        wrapper.and(w -> w.eq(WorkOrder::getCommunityId, currentUser.getCommunityId())
+                                           .or().isNull(WorkOrder::getCommunityId));
+                    }
                 }
             } else if (query.getStaffUserId() != null) {
                 wrapper.eq(WorkOrder::getStaffUserId, query.getStaffUserId());
@@ -604,6 +605,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                     return workOrderMapper.selectCount(wrapper);
                 }
                 wrapper.eq(WorkOrder::getStaffUserId, currentUserId);
+                if (currentUser.getCommunityId() != null) {
+                    wrapper.and(w -> w.eq(WorkOrder::getCommunityId, currentUser.getCommunityId())
+                                       .or().isNull(WorkOrder::getCommunityId));
+                }
             }
         }
         return workOrderMapper.selectCount(wrapper);
