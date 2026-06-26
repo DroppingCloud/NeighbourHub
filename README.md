@@ -147,3 +147,49 @@ DASHSCOPE_OCR_ENABLED=true
 ```
 
 当前会对 JPG/JPEG/PNG 图片材料调用百炼 OCR；PDF、DOC、DOCX 暂不做文件转图片，使用本地规则预审兜底。
+
+## 4. 后端测试运行
+
+本项目已补充后端自动化测试，测试代码位于：
+
+```text
+backend/src/test/java
+```
+
+测试类型包括：
+
+- 单元测试
+- 接口测试
+- 核心业务流程测试
+
+运行方式：
+
+```bash
+cd backend
+mvn test
+```
+
+如果本机未配置 Maven 环境变量，可使用 Maven 完整路径运行，例如：
+
+```powershell
+D:\Environment\Maven\apache-maven-3.9.16\bin\mvn.cmd test
+```
+
+测试通过时会看到类似结果：
+
+```text
+Tests run: 23, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+测试报告生成在：
+
+```text
+backend/target/surefire-reports
+```
+
+说明：当前自动化测试主要使用 Mock 隔离数据库、Redis 和外部 OCR/AI 服务，因此运行测试不需要启动前端、后端、MySQL 或 Redis。完整联调测试请参考：
+
+```text
+doc/test/integration-test.md
+```
